@@ -36,6 +36,12 @@ partly because some of it contains instructive failures I'd rather document than
 - **[DropboxCryptor](https://github.com/muazfurkan/DropboxCryptor)** — AES-encrypted
   Dropbox client with post-download integrity checking. 2022.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="dist/github-snake-dark.svg" />
+  <source media="(prefers-color-scheme: light)" srcset="dist/github-snake.svg" />
+  <img alt="contribution snake" src="dist/github-snake.svg" />
+</picture>
+
 ### Elsewhere
 
 [LinkedIn](https://www.linkedin.com/in/muaz-furkan-kilic) · muazfurkankl@gmail.com
