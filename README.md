@@ -37,6 +37,24 @@ partly because some of it contains instructive failures I'd rather document than
   Dropbox client with post-download integrity checking. 2022.
 
 <!-- MOTD:START -->
+
+### Daily LJASP puzzle &middot; #1
+
+**Red XI 0 &ndash; 3 Sky Blue XI** &middot; 68'
+
+> With the clock ticking into the final stretch, territory and risk appetite become the trade-off.
+
+**What's your call?**
+
+<details>
+<summary>Reveal</summary>
+
+Call "Raise the line and press high through the middle" and the engine boosts momentum (+12) and physicality (+10), but adds risk (+8) and costs stamina (-12). The line steps up, bodies swarm the first pass and the press snaps into gear.
+
+</details>
+
+<sub>Generated from a deterministic simulation. Seeded by date, so the same day always resolves the same way. Last run: 2026-10-08.</sub>
+
 <!-- MOTD:END -->
 
 <picture>
