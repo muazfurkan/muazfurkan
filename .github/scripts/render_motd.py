@@ -16,6 +16,7 @@ from pathlib import Path
 
 START = "<!-- MOTD:START -->"
 END = "<!-- MOTD:END -->"
+DEFAULT_SITE = "https://www.ljasp.com"
 
 
 def clean(value, limit=400):
@@ -23,6 +24,25 @@ def clean(value, limit=400):
   text = " ".join(str(value).split())
   if len(text) > limit:
     text = text[: limit - 1].rstrip() + "…"
+  return html.escape(text, quote=False)
+
+
+def safe_url(value):
+  """Return value if it is a plain absolute http(s) URL, otherwise None.
+
+  These fields come from the endpoint, which is untrusted, and they end up as
+  markdown link targets -- a javascript: scheme would be an injection straight
+  into the profile page. Anything that is not a clean http(s) URL is dropped
+  rather than raised, so the endpoint can start sending a new optional field
+  without breaking a run.
+  """
+  if not isinstance(value, str):
+    return None
+  text = value.strip()
+  if not text.lower().startswith(("http://", "https://")):
+    return None
+  if any(char in text for char in ' \t\n\r"\'()<>'):
+    return None
   return html.escape(text, quote=False)
 
 
@@ -47,12 +67,26 @@ def build(data):
   question = clean(data.get("hint", {}).get("question") or "What's your call?", 120)
   answer = clean(require(data, "hint", "answer"))
 
+  site = safe_url(data.get("site")) or DEFAULT_SITE
+  permalink = safe_url(data.get("permalink"))
+
+  score = (
+    f"**{home_name} {home_score} &ndash; {away_score} {away_name}** &middot; {minute}'"
+  )
+  if permalink:
+    score += f" &nbsp;\u25b8&nbsp; [Play this match]({permalink})"
+
   return "\n".join([
     START,
     "",
-    f"### Daily LJASP puzzle &middot; #{matchday}",
+    "---",
     "",
-    f"**{home_name} {home_score} &ndash; {away_score} {away_name}** &middot; {minute}'",
+    f"### \u26bd Daily LJASP puzzle &middot; #{matchday}",
+    "",
+    f"From [LJASP]({site}), a deterministic football management simulation I build. "
+    "A new decision every day.",
+    "",
+    score,
     "",
     f"> {situation}",
     "",
@@ -65,8 +99,9 @@ def build(data):
     "",
     "</details>",
     "",
-    f"<sub>Generated from a deterministic simulation. Seeded by date, so the "
-    f"same day always resolves the same way. Last run: {date}.</sub>",
+    f"<sub>Seeded by date. Last run: {date}.</sub>",
+    "",
+    "---",
     "",
     END,
   ])
