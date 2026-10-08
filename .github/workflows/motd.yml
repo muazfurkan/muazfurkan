@@ -1,0 +1,85 @@
+name: match-of-the-day
+
+on:
+  schedule:
+    - cron: "15 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: motd
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch match of the day
+        id: fetch
+        env:
+          MOTD_URL: ${{ secrets.MOTD_URL }}
+          MOTD_KEY: ${{ secrets.MOTD_KEY }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o motd.json -w "%{http_code}" \
+            -H "X-MOTD-Key: ${MOTD_KEY}" \
+            --max-time 20 --retry 2 --retry-delay 5 --retry-connrefused \
+            "${MOTD_URL}")
+          echo "code=${code}" >> "$GITHUB_OUTPUT"
+          case "${code}" in
+            200) echo "match available" ;;
+            204) echo "no match today, nothing to do" ;;
+            *)   echo "unexpected status ${code}" >&2; exit 1 ;;
+          esac
+
+      - name: Render into README
+        if: steps.fetch.outputs.code == '200'
+        run: python .github/scripts/render_motd.py motd.json README.md
+
+      - name: Commit if changed
+        if: steps.fetch.outputs.code == '200'
+        run: |
+          rm -f motd.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --staged --quiet && echo "no change" && exit 0
+          git commit -m "chore: match of the day"
+          git push
+
+      - name: Report failure once
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          open_issue=$(gh issue list --label motd-failure --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$open_issue" ]; then
+            echo "motd-failure issue #$open_issue is already open; not opening another"
+            exit 0
+          fi
+          gh label create motd-failure --color B60205 --description "Match-of-the-day workflow failed" || true
+          {
+            echo "The \`match-of-the-day\` workflow failed."
+            echo
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo
+            echo "Likely causes:"
+            echo
+            echo "- The endpoint behind \`MOTD_URL\` was unreachable, timed out, or answered with a status other than 200 or 204."
+            echo "- \`MOTD_KEY\` was rejected."
+            echo "- The response was missing a field that \`.github/scripts/render_motd.py\` requires."
+            echo "- The \`<!-- MOTD:START -->\` / \`<!-- MOTD:END -->\` markers were removed from the README."
+            echo
+            echo "Close this issue once it is fixed. A later failure will open a new one."
+          } > "$RUNNER_TEMP/motd-failure.md"
+          gh issue create --title "Match-of-the-day workflow failed" --label motd-failure --body-file "$RUNNER_TEMP/motd-failure.md"
