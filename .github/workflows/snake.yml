@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: snake
@@ -28,6 +29,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.SNAKE_TOKEN }}
 
+      - name: Add gradual regrow
+        run: |
+          python .github/scripts/snake_regrow.py dist/github-snake.svg dist/github-snake-dark.svg
+
+      - name: Guard against an empty snake
+        run: |
+          python - <<'PY'
+          import re
+          import sys
+
+          MIN_FILLED = 10
+          failed = False
+
+          for path in ("dist/github-snake.svg", "dist/github-snake-dark.svg"):
+              with open(path, encoding="utf-8") as handle:
+                  filled = len(re.findall(r'<rect class="c c[0-9a-z]+"', handle.read()))
+              print(f"{path}: {filled} filled cells")
+              if filled < MIN_FILLED:
+                  sys.stderr.write(
+                      f"{path}: only {filled} filled cells, minimum is {MIN_FILLED}. "
+                      "SNAKE_TOKEN has probably expired or lost access to private "
+                      "contributions -- failing rather than committing an empty snake.\n"
+                  )
+                  failed = True
+
+          sys.exit(1 if failed else 0)
+          PY
+
       - name: Commit if changed
         run: |
           git config user.name "github-actions[bot]"
@@ -36,3 +65,29 @@ jobs:
           git diff --staged --quiet && echo "no change" && exit 0
           git commit -m "chore: update snake"
           git push
+
+      - name: Report failure once
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          open_issue=$(gh issue list --label snake-failure --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$open_issue" ]; then
+            echo "snake-failure issue #$open_issue is already open; not opening another"
+            exit 0
+          fi
+          gh label create snake-failure --color B60205 --description "Contribution snake workflow failed" || true
+          {
+            echo "The \`snake\` workflow failed."
+            echo
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo
+            echo "Likely causes:"
+            echo
+            echo "- \`SNAKE_TOKEN\` expired or lost access to private contributions. The guard step fails when fewer than 10 cells are filled, so the snake never quietly goes empty."
+            echo "- snk changed its SVG output format, so \`.github/scripts/snake_regrow.py\` no longer matches and exits 1 instead of silently skipping."
+            echo
+            echo "Close this issue once it is fixed. A later failure will open a new one."
+          } > "$RUNNER_TEMP/snake-failure.md"
+          gh issue create --title "Snake workflow failed" --label snake-failure --body-file "$RUNNER_TEMP/snake-failure.md"
