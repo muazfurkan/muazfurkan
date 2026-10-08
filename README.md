@@ -44,7 +44,11 @@ instructive failures I'd rather document than hide.
 
 <!-- MOTD:START -->
 
-### Daily LJASP puzzle &middot; #1
+---
+
+### ⚽ Daily LJASP puzzle &middot; #1
+
+From [LJASP](https://www.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
 **Red XI 0 &ndash; 3 Sky Blue XI** &middot; 68'
 
@@ -59,7 +63,9 @@ Call "Raise the line and press high through the middle" and the engine boosts mo
 
 </details>
 
-<sub>Generated from a deterministic simulation. Seeded by date, so the same day always resolves the same way. Last run: 2026-10-08.</sub>
+<sub>Seeded by date. Last run: 2026-10-08.</sub>
+
+---
 
 <!-- MOTD:END -->
 
