@@ -46,24 +46,24 @@ instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #5
+### ⚽ Daily LJASP puzzle &middot; #6
 
 From [LJASP](https://www.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**Claret XI 2 &ndash; 4 Blue XI** &middot; 68'
+**White XI 0 &ndash; 2 Blue XI** &middot; 46'
 
-> Into the final stretch; legs are heavy and gaps appear as both sides trade counters.
+> The interval passes with the opponent lively in transition and your side searching for cleaner connections around the box.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Sit deeper and spring on turnovers" and the engine boosts pace (+12), wing pressure (+10) and momentum (+9) at no added risk. The block drops a few yards, then bursts forward as soon as the ball is won.
+Call "Squeeze the touchlines and overload the flanks" and the engine boosts wing pressure (+14), momentum (+10) and stamina (+9), but adds risk (+12). Shape tilts to the flanks as White XI pin the touchlines and look to drag markers wide.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-10-12.</sub>
+<sub>Seeded by date. Last run: 2026-10-13.</sub>
 
 ---
 
