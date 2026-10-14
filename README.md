@@ -46,24 +46,24 @@ instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #6
+### ⚽ Daily LJASP puzzle &middot; #7
 
 From [LJASP](https://www.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**White XI 0 &ndash; 2 Blue XI** &middot; 46'
+**Red XI 2 &ndash; 3 White XI** &middot; 68'
 
-> The interval passes with the opponent lively in transition and your side searching for cleaner connections around the box.
+> With the game opening up, midfield spaces flicker on and off and the next phase could tilt the balance.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Squeeze the touchlines and overload the flanks" and the engine boosts wing pressure (+14), momentum (+10) and stamina (+9), but adds risk (+12). Shape tilts to the flanks as White XI pin the touchlines and look to drag markers wide.
+Call "Unleash a creator between the lines" and the engine boosts creativity (+15), sharpness (+9) and momentum (+8) at no added risk. Fresh invention arrives between the lines as your side look for the killer pass.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-10-13.</sub>
+<sub>Seeded by date. Last run: 2026-10-14.</sub>
 
 ---
 
