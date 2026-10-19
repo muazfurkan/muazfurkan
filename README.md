@@ -46,24 +46,24 @@ instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #11
+### ⚽ Daily LJASP puzzle &middot; #12
 
 From [LJASP](https://www.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**Black XI 0 &ndash; 3 Claret XI** &middot; 46'
+**Red XI 2 &ndash; 3 White XI** &middot; 46'
 
-> Halftime arrives with pressure mounting and a response needed to tilt the balance.
+> Half-time arrives with the contest finely poised and space appearing out wide for runners to attack.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Pair two strikers and keep natural width to stretch the back line" and the engine boosts wing pressure (+12) and momentum (+10), but adds risk (+12). Two forwards are pushed on, with wide players holding the touchlines to pin the defence.
+Call "Control the tempo and recycle patiently" and the engine boosts creativity (+14) and momentum (+10) at no added risk. Your side slow it down, prioritising secure passing and long spells on the ball.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-10-18.</sub>
+<sub>Seeded by date. Last run: 2026-10-19.</sub>
 
 ---
 
