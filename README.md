@@ -46,24 +46,24 @@ instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #21
+### ⚽ Daily LJASP puzzle &middot; #22
 
 From [LJASP](https://www.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**Red &amp; White XI 0 &ndash; 3 Red &amp; Black XI** &middot; 46'
+**Blue XI 0 &ndash; 5 Red XI** &middot; 46'
 
-> Interval arrives with the contest finely poised and space appearing between the lines.
+> The interval arrives with momentum against your side and the crowd sensing more intensity to come.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Steady the middle and recycle possession" and the engine boosts creativity (+12), momentum (+10) and stamina (+9) at no added risk. Your side tighten the shape, midfielders showing for the ball and prioritising secure passes through the centre.
+Call "Target the channels and release wide runners early" and the engine boosts wing pressure (+14), pace (+12) and momentum (+9), but adds risk (+10). Your side tilt the pitch toward the flanks, full-backs stepping on and wingers primed to spin into space.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-10-28.</sub>
+<sub>Seeded by date. Last run: 2026-10-29.</sub>
 
 ---
 
