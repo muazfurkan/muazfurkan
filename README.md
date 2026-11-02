@@ -46,24 +46,24 @@ instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #25
+### ⚽ Daily LJASP puzzle &middot; #26
 
 From [LJASP](https://www.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**White XI 0 &ndash; 2 Sky Blue XI** &middot; 68'
+**Red XI 1 &ndash; 5 Blue XI** &middot; 68'
 
-> Into the final third of the match, legs tire and rhythm swings.
+> Into the final stretch, spaces open as legs tire.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Add an extra attacker and overload the box" and the engine boosts momentum (+12) and sharpness (+9), but adds risk (+11). Another forward joins the line; crosses and cut-backs are loaded with targets.
+Call "Raise the press and trap their build-up" and the engine boosts momentum (+12), physicality (+12) and stamina (+12), but adds risk (+11). Your side steps up as a unit, hunting in packs and locking the opponent near their box.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-11-01.</sub>
+<sub>Seeded by date. Last run: 2026-11-02.</sub>
 
 ---
 
