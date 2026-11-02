@@ -48,7 +48,7 @@ instructive failures I'd rather document than hide.
 
 ### ⚽ Daily LJASP puzzle &middot; #26
 
-From [LJASP](https://www.ljasp.com), a deterministic football management simulation I build. A new decision every day.
+From [LJASP](https://play.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
 **Red XI 1 &ndash; 5 Blue XI** &middot; 68'
 

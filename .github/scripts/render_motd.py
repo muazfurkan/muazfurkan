@@ -16,7 +16,7 @@ from pathlib import Path
 
 START = "<!-- MOTD:START -->"
 END = "<!-- MOTD:END -->"
-DEFAULT_SITE = "https://www.ljasp.com"
+DEFAULT_SITE = "https://play.ljasp.com"
 
 
 def clean(value, limit=400):
