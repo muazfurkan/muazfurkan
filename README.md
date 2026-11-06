@@ -46,24 +46,24 @@ instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #29
+### ⚽ Daily LJASP puzzle &middot; #30
 
 From [LJASP](https://play.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**White XI 1 &ndash; 4 Blue XI** &middot; 68'
+**Red XI 0 &ndash; 3 Sky Blue XI** &middot; 46'
 
-> Into the final phase with the clock ticking and a result on the line.
+> Interval arrives with your side chasing rhythm; the midfield balance and width feel decisive for the restart.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Inject pace out wide" and the engine boosts wing pressure (+14), momentum (+10) and stamina (+9) at no added risk. Fresh legs hit the flanks, switches of play target open grass and mismatches.
+Call "Push the wingers high and attack the flanks at pace" and the engine boosts wing pressure (+14) and pace (+12), but adds risk (+10). The wide players hold the chalk and the tempo shifts toward quick switches.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-11-05.</sub>
+<sub>Seeded by date. Last run: 2026-11-06.</sub>
 
 ---
 
