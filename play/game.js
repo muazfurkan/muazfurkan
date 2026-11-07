@@ -42,10 +42,12 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
   const SWIPE_PX = 18;
   const FLICK_PX = 8;
   // Reaching UNLOCK_SCORE: the snake reels into its head, the lock below
-  // breaks, and the head drops into the strip as the runner.
-  const CURL_MS = 480;
-  const OPEN_DELAY_MS = 150;
-  const DROP_MS = 560;
+  // breaks, the head rests a moment as one square, then drops into the strip
+  // as the runner. Slow enough to follow.
+  const CURL_MS = 900;
+  const OPEN_DELAY_MS = 400;
+  const HOLD_MS = 350;
+  const DROP_MS = 950;
   const APPEAR_MS = 400;
 
   const POINTS = { '--c1': 1, '--c2': 2, '--c3': 3, '--c4': 4, '--hl': 5 };
@@ -368,10 +370,12 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
         unlock.opened = true;
       }
       if (now - unlock.at < CURL_MS) return;
-      if (calmQuery.matches) {
-        finishUnlock(now);
-        return;
-      }
+      if (calmQuery.matches) finishUnlock(now);
+      else unlock = { phase: 'hold', at: now, opened: true };
+      return;
+    }
+    if (unlock.phase === 'hold') {
+      if (now - unlock.at < HOLD_MS) return;
       unlock = { phase: 'drop', at: now, opened: true, from: headRect(), to: runner.dropTarget() };
       fx.width = Math.round(window.innerWidth * dpr);
       fx.height = Math.round(window.innerHeight * dpr);
@@ -612,10 +616,15 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     const level = pressLevel(now);
     let curl = 0;
     let alpha = 1;
+    let pulse = 1;
     if (unlock?.phase === 'curl') {
       const p = Math.min(1, (now - unlock.at) / CURL_MS);
       if (calmQuery.matches) alpha = 1 - p;
       else curl = p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2;
+    } else if (unlock?.phase === 'hold') {
+      // One square now: it swells a little, as if taking a breath.
+      curl = 1;
+      pulse = 1 + 0.18 * Math.sin(Math.PI * Math.min(1, (now - unlock.at) / HOLD_MS));
     }
     if (state === 'over') {
       const p = Math.min(1, (now - overAt) / FADE_MS);
@@ -631,8 +640,8 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     for (let i = snake.length - 1; i >= 0; i -= 1) {
       const pos = curl ? curlPos(i, curl) : segmentPos(i, t);
       const [inset, size, radius] = segmentShape(i);
-      let w = size;
-      let h = size;
+      let w = i === 0 ? size * pulse : size;
+      let h = i === 0 ? size * pulse : size;
       const push = level && pressVecs?.[i];
       if (push) {
         pos.c += push.c * level;

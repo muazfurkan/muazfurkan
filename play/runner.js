@@ -38,8 +38,9 @@ const RADIUS = 4.5;
 const INSET = 0.8;
 const GEM_PX = 8;
 const DIM = 0.35;
-const OPEN_MS = 700;
-const SHATTER_MS = 750;
+const OPEN_MS = 1100;
+const SHATTER_MS = 1100;
+const SHATTER_PACE = 0.7; // the pieces drift apart rather than fly
 const LAND_MS = 170;
 const SQUASH = 0.2;
 const BOUNCE_MS = 380;
@@ -58,8 +59,7 @@ const OLD_OPEN_KEY = 'contribution-runner-open';
 // The lock, five cells wide and as tall as the strip.
 const LOCK = ['.###.', '#...#', '#...#', '#####', '##.##', '##.##', '#####'];
 
-// The first stretch is always the same, so the locked strip shows a real
-// piece of the course and every run starts the same way.
+// The first stretch is always the same, so every run starts the same way.
 const OPENING = {
   length: 54,
   gaps: [22, 23, 39, 40],
@@ -387,8 +387,9 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
     return Math.floor(cols / 2) - 2;
   }
 
-  function drawCourse(pal, camX, alpha, now) {
-    ctx.globalAlpha = alpha;
+  // The empty grid at `alpha`; the course on it (ground, blocks and cells to
+  // pick up) at `alpha * reveal`, so the locked strip shows only the grid.
+  function drawCourse(pal, camX, alpha, reveal, now) {
     ctx.lineWidth = 1;
     ctx.strokeStyle = pal['--cb'] ?? 'transparent';
     const inset = (PITCH - DOT) / 2;
@@ -396,19 +397,29 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
       const px = (c - camX) * PITCH + inset;
       const top = topAt(c);
       for (let r = 0; r < ROWS; r += 1) {
-        let color = pal['--ce'];
+        let color = null;
         if (r === ROWS - 1) {
           if (top > -Infinity) color = pal['--c2'];
         } else if (top > 0 && r >= ROWS - 1 - top) {
           color = pal['--c4'];
         }
         roundRect(px, r * PITCH + inset, DOT, DOT, DOT_RADIUS);
-        ctx.fillStyle = color;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = pal['--ce'];
         ctx.fill();
         ctx.stroke();
+        if (color && reveal > 0) {
+          ctx.globalAlpha = alpha * reveal;
+          ctx.fillStyle = color;
+          ctx.fill();
+        }
       }
     }
 
+    if (reveal <= 0) {
+      ctx.globalAlpha = 1;
+      return;
+    }
     ctx.fillStyle = pal['--hl'] ?? 'orange';
     const bob = calm.matches || state === 'locked' ? 0 : 1;
     for (const gem of gems) {
@@ -423,7 +434,7 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
       }
       const cx = (gem.x - camX) * PITCH;
       const cy = GROUND_TOP - gem.y * PITCH + bob * Math.sin(now / 320 + gem.x) * 1.2;
-      ctx.globalAlpha = alpha * fade;
+      ctx.globalAlpha = alpha * reveal * fade;
       roundRect(cx - size / 2, cy - size / 2, size, size, 2);
       ctx.fill();
     }
@@ -453,7 +464,7 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
 
   function drawShards(pal, now) {
     if (!shards.length) return;
-    const t = (now - openAt) / 1000;
+    const t = ((now - openAt) / 1000) * SHATTER_PACE;
     const p = (now - openAt) / SHATTER_MS;
     if (p >= 1) {
       shards = [];
@@ -527,9 +538,15 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
 
     const camX = x - START_X;
+    // Locked, the strip is a faint empty grid; opening lights it up and the
+    // course fades in.
     let dim = state === 'locked' ? DIM : 1;
-    if (openAt !== null && now - openAt < OPEN_MS) dim = lerp(DIM, 1, easeOut((now - openAt) / OPEN_MS));
-    drawCourse(pal, camX, dim, now);
+    let reveal = state === 'locked' ? 0 : 1;
+    if (openAt !== null && now - openAt < OPEN_MS) {
+      reveal = easeOut((now - openAt) / OPEN_MS);
+      dim = lerp(DIM, 1, reveal);
+    }
+    drawCourse(pal, camX, dim, reveal, now);
 
     if (state === 'locked') drawLock(pal, now, 1);
     else if (openAt !== null && calm.matches && now - openAt < OPEN_MS) drawLock(pal, now, 1 - (now - openAt) / OPEN_MS);
