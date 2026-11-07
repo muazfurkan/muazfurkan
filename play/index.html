@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <title>Contribution snake</title>
+  <meta name="description" content="The snake from Muaz Furkan Kılıç's GitHub profile, on the same contribution graph, steered by you.">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="game.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <a class="back" href="https://github.com/muazfurkan">← muazfurkan</a>
+      <p class="stats">
+        <span>Score <b id="score">0</b></span>
+        <span>Best <b id="best">0</b></span>
+        <span>Length <b id="length">4</b></span>
+      </p>
+    </header>
+    <div class="board" id="board">
+      <canvas id="canvas" role="img" aria-label="A contribution graph with a snake on it"></canvas>
+      <p class="status" id="status" aria-live="polite">Loading the graph…</p>
+    </div>
+    <p class="hint" id="hint">
+      <span class="keys">Arrow keys or WASD to steer, Space to pause.</span>
+      <span class="touch">Swipe to steer, tap to pause.</span>
+      Darker cells are worth more and the orange ones are the newest days. Eaten cells grow back.
+    </p>
+    <noscript><p class="hint">The game needs JavaScript.</p></noscript>
+  </main>
+</body>
+</html>

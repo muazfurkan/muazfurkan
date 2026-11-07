@@ -86,11 +86,15 @@ Call "Push the wingers high and attack the flanks at pace" and the engine boosts
 
 <!-- MOTD:END -->
 
+<a href="https://muazfurkan.github.io/muazfurkan/play/">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="dist/github-snake-dark.svg" />
   <source media="(prefers-color-scheme: light)" srcset="dist/github-snake.svg" />
   <img alt="contribution snake" src="dist/github-snake.svg" />
 </picture>
+</a>
+
+<sub>The snake is playable: <a href="https://muazfurkan.github.io/muazfurkan/play/">steer it yourself</a>.</sub>
 
 ### Elsewhere
 
