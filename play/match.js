@@ -19,6 +19,7 @@ const BOUNCE = 0.9;
 const KICK_MIN = 14;
 const THEIR_KICK = 16; // plus up to 6 more
 const ASPECT = 2.2; // the pitch, length to width
+const STILL_S = 5; // a ball left in one place this long goes back to the middle
 
 // Drawing and pacing, in milliseconds.
 const MERGE_MS = 1400;
@@ -119,6 +120,8 @@ export function createMatch({ wrap, canvas, statusEl, hintEl, finale, artEl, sco
   let thinkIn = 0;
   let touchedUs = -1; // match time of each side's last touch
   let touchedThem = -1;
+  let still = { x: 0, y: 0, for: 0 }; // where the ball has been sitting, and for how long
+  let respot = null; // { at, x, y }: the ball just went back to the middle
   let ours = 0;
   let theirs = 0;
   let clock = MATCH_S;
@@ -191,6 +194,8 @@ export function createMatch({ wrap, canvas, statusEl, hintEl, finale, artEl, sco
     thinkIn = 0;
     touchedUs = -1;
     touchedThem = -1;
+    still = { x: ball.x, y: ball.y, for: 0 };
+    respot = null;
   }
 
   // ---------- play ----------
@@ -386,6 +391,22 @@ export function createMatch({ wrap, canvas, statusEl, hintEl, finale, artEl, sco
     return null;
   }
 
+  // Nobody has moved the ball for a while: back to the middle it goes.
+  function watchStill(h, now) {
+    if (Math.hypot(ball.x - still.x, ball.y - still.y) > 0.6) {
+      still = { x: ball.x, y: ball.y, for: 0 };
+      return;
+    }
+    still.for += h;
+    if (still.for < STILL_S || Math.hypot(ball.x - L / 2, ball.y - B / 2) < 1) return;
+    respot = { at: now, x: ball.x, y: ball.y };
+    ball.x = L / 2;
+    ball.y = B / 2;
+    ball.vx = 0;
+    ball.vy = 0;
+    still = { x: ball.x, y: ball.y, for: 0 };
+  }
+
   function goal(by, now) {
     if (by === 'us') ours += 1;
     else theirs += 1;
@@ -413,6 +434,7 @@ export function createMatch({ wrap, canvas, statusEl, hintEl, finale, artEl, sco
     moveUs(h);
     moveThem(h);
     if (moveBall(h, now)) return;
+    watchStill(h, now);
     if (!golden && clock <= 0) {
       if (ours !== theirs) finish(now);
       else {
@@ -502,10 +524,21 @@ export function createMatch({ wrap, canvas, statusEl, hintEl, finale, artEl, sco
     ctx.globalAlpha = 1;
   }
 
-  function drawPlayers(team, alpha) {
+  function drawPlayers(team, alpha, now) {
     drawSquare(us.x, us.y, SIDE - 0.15, team.ours, alpha, 6);
     drawSquare(them.x, them.y, SIDE - 0.15, team.theirs, alpha, 6);
-    drawSquare(ball.x, ball.y, BALL_R * 2 - 0.1, team.ball, alpha, 4);
+    const size = BALL_R * 2 - 0.1;
+    if (respot && !calm.matches) {
+      // It shrinks away where it stood and grows back in the middle.
+      const p = (now - respot.at) / 450;
+      if (p >= 1) respot = null;
+      else {
+        if (p < 0.5) drawSquare(respot.x, respot.y, size * (1 - p * 2), team.ball, alpha, 4);
+        drawSquare(ball.x, ball.y, size * easeOut(clamp((p - 0.3) / 0.7, 0, 1)), team.ball, alpha, 4);
+        return;
+      }
+    }
+    drawSquare(ball.x, ball.y, size, team.ball, alpha, 4);
   }
 
   function clockText() {
@@ -703,7 +736,7 @@ export function createMatch({ wrap, canvas, statusEl, hintEl, finale, artEl, sco
     }
     drawGrid(ctx, pal, cols, rows, gridAlpha);
     drawMarks(pal, team, content);
-    drawPlayers(team, content);
+    drawPlayers(team, content, now);
     if (state !== 'merging') drawHud(team);
     if (goalP !== null) drawGoalScore(team, goalP);
     if (ending) drawEnding(pal, team, now);
