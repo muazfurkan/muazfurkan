@@ -12,11 +12,12 @@
   const DOT_RADIUS = 2;
   const COLS = 53;
   const ROWS = 7;
-  // As in the SVG, the snake may also use a one-cell margin around the graph.
-  const MIN_COL = -1;
-  const MAX_COL = COLS;
-  const MIN_ROW = -1;
-  const MAX_ROW = ROWS;
+  // The board is the graph itself: the snake stays on the cells.
+  const MIN_COL = 0;
+  const MAX_COL = COLS - 1;
+  const MIN_ROW = 0;
+  const MAX_ROW = ROWS - 1;
+  const START_HEAD = { c: 8, r: 3 }; // left half, middle row, facing right
   const BOARD_COLS = MAX_COL - MIN_COL + 1;
   const BOARD_ROWS = MAX_ROW - MIN_ROW + 1;
 
@@ -140,10 +141,10 @@
   }
 
   function reset() {
-    // The README animation's first frame: head at the top-left, in the margin.
-    snake = [0, 1, 2, 3].map((c) => ({ c, r: -1 }));
+    // Four segments, as in the README, with the whole board ahead of the head.
+    snake = [0, 1, 2, 3].map((i) => ({ c: START_HEAD.c - i, r: START_HEAD.r }));
     previous = snake.map((p) => ({ ...p }));
-    dir = LEFT;
+    dir = RIGHT;
     queue = [];
     grow = 0;
     score = 0;
