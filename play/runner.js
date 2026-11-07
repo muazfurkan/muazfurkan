@@ -3,6 +3,8 @@
 // UNLOCK_SCORE points and stays open until the page is left; every visit
 // starts locked.
 
+import { LOCK, PLAY, drawCover, drawPattern, iconCenter, iconOrigin, shardsOf, drawShards } from './cells.js';
+
 export const UNLOCK_SCORE = 200;
 
 const PITCH = 16;
@@ -40,7 +42,6 @@ const GEM_PX = 8;
 const DIM = 0.35;
 const OPEN_MS = 1100;
 const SHATTER_MS = 1100;
-const SHATTER_PACE = 0.7; // the pieces drift apart rather than fly
 const LAND_MS = 170;
 const SQUASH = 0.2;
 const BOUNCE_MS = 380;
@@ -55,9 +56,6 @@ const APPEAR_MS = 300;
 const BEST_KEY = 'contribution-runner-best';
 // An earlier version kept the strip open across visits under this key.
 const OLD_OPEN_KEY = 'contribution-runner-open';
-
-// The lock, five cells wide and as tall as the strip.
-const LOCK = ['.###.', '#...#', '#...#', '#####', '##.##', '##.##', '#####'];
 
 // The first stretch is always the same, so every run starts the same way.
 const OPENING = {
@@ -121,7 +119,7 @@ function forget(key) {
   }
 }
 
-export function createRunner({ board, canvas, statusEl, lockline, bar, runline, scoreEl, bestEl, palette, calm, touch }) {
+export function createRunner({ board, canvas, statusEl, lockline, bar, runline, scoreEl, bestEl, palette, calm, touch, onScore }) {
   const ctx = canvas.getContext('2d');
 
   forget(OLD_OPEN_KEY);
@@ -168,6 +166,7 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
   let shards = [];
   let wiggleAt = null;
   let appearAt = null;
+  let squareGone = false; // the square has left for the board below
 
   // ---------- course ----------
 
@@ -383,12 +382,6 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
     ctx.closePath();
   }
 
-  function lockColumn() {
-    return Math.floor(cols / 2) - 2;
-  }
-
-  // The empty grid at `alpha`; the course on it (ground, blocks and cells to
-  // pick up) at `alpha * reveal`, so the locked strip shows only the grid.
   function drawCourse(pal, camX, alpha, reveal, now) {
     ctx.lineWidth = 1;
     ctx.strokeStyle = pal['--cb'] ?? 'transparent';
@@ -441,45 +434,14 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
     ctx.globalAlpha = 1;
   }
 
-  function drawLock(pal, now, alpha) {
-    const c0 = lockColumn();
-    let shift = 0;
-    if (wiggleAt !== null) {
-      const p = (now - wiggleAt) / WIGGLE_MS;
-      if (p >= 1 || calm.matches) wiggleAt = null;
-      else shift = Math.sin(p * Math.PI * 4) * (1 - p) * 0.18 * PITCH;
+  function wiggle(now) {
+    if (wiggleAt === null) return 0;
+    const p = (now - wiggleAt) / WIGGLE_MS;
+    if (p >= 1 || calm.matches) {
+      wiggleAt = null;
+      return 0;
     }
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = pal['--cs'] ?? 'purple';
-    const inset = (PITCH - DOT) / 2;
-    LOCK.forEach((line, r) => {
-      [...line].forEach((ch, i) => {
-        if (ch !== '#') return;
-        roundRect((c0 + i) * PITCH + inset + shift, r * PITCH + inset, DOT, DOT, DOT_RADIUS);
-        ctx.fill();
-      });
-    });
-    ctx.globalAlpha = 1;
-  }
-
-  function drawShards(pal, now) {
-    if (!shards.length) return;
-    const t = ((now - openAt) / 1000) * SHATTER_PACE;
-    const p = (now - openAt) / SHATTER_MS;
-    if (p >= 1) {
-      shards = [];
-      return;
-    }
-    ctx.fillStyle = pal['--cs'] ?? 'purple';
-    ctx.globalAlpha = 1 - easeOut(p);
-    for (const s of shards) {
-      const size = DOT * (1 - 0.5 * p);
-      const cx = (s.x + s.vx * t) * PITCH;
-      const cy = (s.y + s.vy * t + 15 * t * t) * PITCH;
-      roundRect(cx - size / 2, cy - size / 2, size, size, DOT_RADIUS);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    return Math.sin(p * Math.PI * 4) * (1 - p) * 0.18 * PITCH;
   }
 
   function bounce(p) {
@@ -537,21 +499,44 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
     if (!pal) return;
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
 
+    // Locked, or not the game being played: the faint grid and an icon.
+    if (covered()) {
+      drawCover(ctx, pal, cols, ROWS, state === 'locked' ? LOCK : PLAY, { shift: wiggle(now) });
+      return;
+    }
+
     const camX = x - START_X;
-    // Locked, the strip is a faint empty grid; opening lights it up and the
-    // course fades in.
-    let dim = state === 'locked' ? DIM : 1;
-    let reveal = state === 'locked' ? 0 : 1;
+    // Opening lights the strip up and the course fades in.
+    let dim = 1;
+    let reveal = 1;
     if (openAt !== null && now - openAt < OPEN_MS) {
       reveal = easeOut((now - openAt) / OPEN_MS);
       dim = lerp(DIM, 1, reveal);
     }
     drawCourse(pal, camX, dim, reveal, now);
 
-    if (state === 'locked') drawLock(pal, now, 1);
-    else if (openAt !== null && calm.matches && now - openAt < OPEN_MS) drawLock(pal, now, 1 - (now - openAt) / OPEN_MS);
-    drawShards(pal, now);
-    if (state !== 'locked' && state !== 'arriving') drawRunner(pal, camX, now);
+    if (openAt !== null && now - openAt < SHATTER_MS) {
+      const purple = pal['--cs'] ?? 'purple';
+      if (calm.matches) {
+        const { c0, r0 } = iconOrigin(cols, ROWS, LOCK);
+        ctx.globalAlpha = 1 - (now - openAt) / SHATTER_MS;
+        drawPattern(ctx, purple, LOCK, c0, r0);
+        ctx.globalAlpha = 1;
+      } else {
+        const centre = iconCenter(cols, ROWS, LOCK);
+        ctx.save();
+        ctx.translate(centre.x, centre.y);
+        drawShards(ctx, purple, shards, now - openAt, SHATTER_MS);
+        ctx.restore();
+      }
+    }
+    if (state !== 'arriving' && !squareGone) drawRunner(pal, camX, now);
+  }
+
+  function covered() {
+    if (state === 'locked') return true;
+    if (state === 'arriving' || state === 'leaving') return false;
+    return !active || state === 'paused';
   }
 
   // ---------- page ----------
@@ -578,22 +563,22 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
   function updateStats() {
     score = Math.floor(distance) + gemsTaken * GEM_POINTS;
     const top = Math.max(best, score);
-    if (score !== shownScore) scoreEl.textContent = String((shownScore = score));
+    if (score !== shownScore) {
+      scoreEl.textContent = String((shownScore = score));
+      onScore?.(score);
+    }
     if (top !== shownBest) bestEl.textContent = String((shownBest = top));
   }
 
   function showStatus() {
     const tap = touch.matches;
     let text = '';
-    if (state === 'ready') {
-      if (!active) text = tap ? 'Tap to play' : 'Click to play';
-      else if (greeting) text = tap ? 'Unlocked. Tap to run' : 'Unlocked. Press Space to run';
+    if (!active) text = '';
+    else if (state === 'ready') {
+      if (greeting) text = tap ? 'Unlocked. Tap to run' : 'Unlocked. Press Space to run';
       else text = tap ? 'Tap to run' : 'Press Space to run';
-    } else if (state === 'paused') {
-      text = tap ? 'Paused. Tap to go on' : active ? 'Paused. Press Space to go on' : 'Paused. Click to go on';
     } else if (state === 'over' && statusShown) {
-      const again = tap ? 'Tap' : active ? 'Press Space' : 'Click';
-      text = `Game over: ${score} points. ${again} to run again`;
+      text = `Game over: ${score} points. ${tap ? 'Tap' : 'Press Space'} to run again`;
     }
     statusEl.textContent = text;
   }
@@ -624,8 +609,7 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
       return state;
     },
     isOpen: () => open,
-    // A run is under way, so keys that belong to the snake are held back.
-    busy: () => state === 'running' || state === 'ending',
+    covered,
     update,
     draw,
     layout,
@@ -690,6 +674,45 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
       showStatus();
     },
 
+    resume() {
+      if (state !== 'paused') return;
+      state = 'running';
+      showStatus();
+    },
+
+    nudge,
+
+    // The run reached the next board's score: the square stops to leave.
+    leave() {
+      state = 'leaving';
+      holding = false;
+      saveBest();
+      showStatus();
+    },
+
+    // Where the square is, in page pixels.
+    squareRect() {
+      const rect = canvas.getBoundingClientRect();
+      const camX = x - START_X;
+      return {
+        x: rect.left + (x - camX) * PITCH * scale,
+        y: rect.top + (GROUND_TOP - INSET - y * PITCH - SIZE / 2) * scale,
+        size: SIZE * scale,
+      };
+    },
+
+    hideSquare() {
+      squareGone = true;
+    },
+
+    // After it left, the strip starts over, ready for another run.
+    finishLeave() {
+      squareGone = false;
+      resetRun();
+      state = 'ready';
+      showStatus();
+    },
+
     // The snake reached the score: the lock breaks and the strip lights up.
     openUp(now) {
       if (open) return;
@@ -697,21 +720,7 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, runline, 
       state = 'arriving';
       openAt = now;
       greeting = true;
-      shards = [];
-      if (!calm.matches) {
-        const c0 = lockColumn();
-        LOCK.forEach((line, r) => {
-          [...line].forEach((ch, i) => {
-            if (ch !== '#') return;
-            shards.push({
-              x: c0 + i + 0.5,
-              y: r + 0.5,
-              vx: (i - 2) * 1.6 + (Math.random() - 0.5) * 1.6,
-              vy: -(2 + Math.random() * 3),
-            });
-          });
-        });
-      }
+      shards = calm.matches ? [] : shardsOf(LOCK);
       resetRun();
       showOpen();
       showStatus();

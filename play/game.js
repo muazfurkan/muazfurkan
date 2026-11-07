@@ -5,6 +5,9 @@
 // highlight always match what the profile shows.
 
 import { createRunner, UNLOCK_SCORE } from './runner.js';
+import { createBricks, BRICKS_SCORE } from './bricks.js';
+import { createMatch } from './match.js';
+import { PLAY, clamp, drawCover } from './cells.js';
 
 (() => {
   const PITCH = 16; // one cell in the SVG, gap included
@@ -49,6 +52,19 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
   const HOLD_MS = 350;
   const DROP_MS = 950;
   const APPEAR_MS = 400;
+  // Reaching BRICKS_SCORE: the runner stops, the wall's lock breaks and the
+  // square drops onto the paddle as the ball.
+  const LEAVE_OPEN_MS = 150;
+  const LEAVE_HOLD_MS = 450;
+  // The wall cleared: a beat, then the boards merge into the pitch.
+  const FINAL_DELAY_MS = 700;
+  const TOUCH_SETTLE_MS = 450; // a tap on a play icon is not also a tap on the game
+
+  // Board sizes, in cells.
+  const BRICK_ROWS = 14;
+  const PHONE_BRICK_COLS = 22;
+  const NARROW_PX = 560; // below this the board being played takes the room
+  const MIN_GAP = 24;
 
   const POINTS = { '--c1': 1, '--c2': 2, '--c3': 3, '--c4': 4, '--hl': 5 };
   // Inset, size and corner radius of the first segments, as snk draws them.
@@ -82,6 +98,15 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
   const calmQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   const runnerBoard = document.getElementById('runner-board');
   const runnerCanvas = document.getElementById('runner-canvas');
+  const bricksBoard = document.getElementById('bricks-board');
+  const bricksCanvas = document.getElementById('bricks-canvas');
+  const gamesEl = document.getElementById('games');
+  const finalEl = document.getElementById('final');
+  const pitchWrap = document.getElementById('pitch-wrap');
+  const pitchCanvas = document.getElementById('pitch');
+  const mainEl = document.querySelector('main');
+  const headerEl = document.querySelector('header');
+  const sections = { snake: boardEl.closest('.game'), runner: runnerBoard.closest('.game'), bricks: bricksBoard.closest('.game') };
   const fx = document.getElementById('fx');
   const fxCtx = fx.getContext('2d');
 
@@ -116,9 +141,33 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
   let scale = 1;
   let dpr = 1;
 
-  let active = 'snake'; // the game that takes the keys: snake | runner
-  let unlock = null; // { phase: 'finish' | 'curl' | 'drop', at, opened, from, to }
+  let active = 'snake'; // the game that takes the keys: snake | runner | bricks | match
+  let unlock = null; // snake to runner: { phase: 'finish' | 'curl' | 'hold', at, opened }
+  let leaving = null; // runner to the wall: { at, opened, flying }
+  let flight = null; // a square on its way between boards: { at, dur, from, to, land }
+  let finalAt = null; // when the boards merge into the pitch
   let appearAt = null; // the snake fades back in after it became the runner
+  let narrow = false;
+  let cellPx = 16;
+  let ignoreTouchUntil = 0;
+
+  // The wall first: the runner reports its score to it from the start.
+  const bricks = createBricks({
+    canvas: bricksCanvas,
+    statusEl: document.getElementById('bricks-status'),
+    lockline: document.getElementById('bricks-lockline'),
+    bar: document.getElementById('bricks-bar'),
+    line: document.getElementById('brickline'),
+    scoreEl: document.getElementById('bricks-score'),
+    bestEl: document.getElementById('bricks-best'),
+    livesEl: document.getElementById('bricks-lives'),
+    palette: () => palettes && palette(),
+    calm: calmQuery,
+    touch: touchQuery,
+    onCleared: (now) => {
+      finalAt = now + FINAL_DELAY_MS;
+    },
+  });
 
   const runner = createRunner({
     board: runnerBoard,
@@ -129,6 +178,24 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     runline: document.getElementById('runline'),
     scoreEl: document.getElementById('run-score'),
     bestEl: document.getElementById('run-best'),
+    palette: () => palettes && palette(),
+    calm: calmQuery,
+    touch: touchQuery,
+    onScore: (runScore) => {
+      bricks.showProgress(runScore);
+      if (runScore >= BRICKS_SCORE && !bricks.isOpen() && runner.state === 'running' && !leaving) beginLeave(performance.now());
+    },
+  });
+
+  const match = createMatch({
+    wrap: pitchWrap,
+    canvas: pitchCanvas,
+    statusEl: document.getElementById('match-status'),
+    hintEl: document.getElementById('match-hint'),
+    finale: document.getElementById('finale'),
+    artEl: document.getElementById('finale-art'),
+    scoreEl: document.getElementById('finale-score'),
+    replayEl: document.getElementById('replay'),
     palette: () => palettes && palette(),
     calm: calmQuery,
     touch: touchQuery,
@@ -348,8 +415,9 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     return true;
   }
 
-  // ---------- opening the strip below ----------
+  // ---------- opening the boards below ----------
 
+  // The snake reached UNLOCK_SCORE.
   function beginUnlock() {
     state = 'unlocking';
     queue = [];
@@ -374,24 +442,68 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
       else unlock = { phase: 'hold', at: now, opened: true };
       return;
     }
-    if (unlock.phase === 'hold') {
-      if (now - unlock.at < HOLD_MS) return;
-      unlock = { phase: 'drop', at: now, opened: true, from: headRect(), to: runner.dropTarget() };
-      fx.width = Math.round(window.innerWidth * dpr);
-      fx.height = Math.round(window.innerHeight * dpr);
-      fx.hidden = false;
-      return;
+    if (unlock.phase === 'hold' && now - unlock.at >= HOLD_MS) {
+      const from = headRect();
+      unlock = { phase: 'drop', at: now, opened: true };
+      setActive('runner');
+      fly(from, runner.dropTarget(), now, finishUnlock);
     }
-    if (now - unlock.at >= DROP_MS) finishUnlock(now);
   }
 
   function finishUnlock(now) {
     unlock = null;
-    fx.hidden = true;
     runner.arrive(now);
     reset();
     appearAt = now;
     setActive('runner');
+  }
+
+  // The runner reached BRICKS_SCORE.
+  function beginLeave(now) {
+    runner.leave(now);
+    leaving = { at: now, opened: false, flying: false };
+  }
+
+  function advanceLeave(now) {
+    if (!leaving.opened && now - leaving.at >= LEAVE_OPEN_MS) {
+      bricks.openUp(now);
+      leaving.opened = true;
+    }
+    if (leaving.flying || now - leaving.at < LEAVE_HOLD_MS) return;
+    const from = runner.squareRect();
+    runner.hideSquare();
+    leaving.flying = true;
+    setActive('bricks');
+    const land = (t) => {
+      bricks.arrive(t);
+      runner.finishLeave();
+      leaving = null;
+    };
+    if (calmQuery.matches) land(now);
+    else fly(from, bricks.dropTarget(), now, land);
+  }
+
+  // The wall is cleared: the three boards become one pitch.
+  function startFinal(now) {
+    const rects = [canvas, runnerCanvas, bricksCanvas].map((c) => c.getBoundingClientRect());
+    const ball = bricks.ballRect();
+    pauseGame(active);
+    active = 'match';
+    runner.setActive(false);
+    bricks.setActive(false);
+    showStatus();
+    gamesEl.classList.add('merged');
+    finalEl.hidden = false;
+    match.layout(cellPx, dpr);
+    match.start(rects, ball, now);
+  }
+
+  // A square crossing from one board to another, drawn above the page.
+  function fly(from, to, now, land) {
+    fx.width = Math.round(window.innerWidth * dpr);
+    fx.height = Math.round(window.innerHeight * dpr);
+    fx.hidden = false;
+    flight = { at: now, dur: DROP_MS, from, to, land };
   }
 
   // Where the head is drawn, in page pixels.
@@ -413,13 +525,13 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
   }
 
   function drawFx(now) {
-    if (unlock?.phase !== 'drop' || !palettes) return;
-    const { from, to } = unlock;
-    const p = Math.min(1, (now - unlock.at) / DROP_MS);
+    if (!flight || !palettes) return;
+    const { from, to } = flight;
+    const p = Math.min(1, (now - flight.at) / flight.dur);
     const along = p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2;
     // A small hop, then down the way things fall.
     const cx = from.x + (to.x - from.x) * along;
-    const cy = from.y + (to.y - from.y) * p * p - 4 * p * (1 - p) * to.size;
+    const cy = from.y + (to.y - from.y) * p * p - 4 * p * (1 - p) * Math.max(to.size, from.size);
     const size = from.size + (to.size - from.size) * p;
     fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     fxCtx.clearRect(0, 0, fx.width, fx.height);
@@ -503,6 +615,7 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
   function applyPalette() {
     if (!palettes) return;
     document.documentElement.style.setProperty('--cell-on', palette()['--c4']);
+    document.documentElement.style.setProperty('--icon', palette()['--cs']);
   }
 
   function hexToRgb(hex) {
@@ -599,6 +712,11 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
 
     const pal = palette();
+    // Not the game being played, or paused: the faint grid and a play icon.
+    if (snakeCovered()) {
+      drawCover(ctx, pal, rotated ? BOARD_ROWS : BOARD_COLS, rotated ? BOARD_COLS : BOARD_ROWS, PLAY);
+      return;
+    }
     ctx.lineWidth = 1;
     ctx.strokeStyle = pal['--cb'] ?? 'transparent';
     for (const cell of cells) {
@@ -662,6 +780,10 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     ctx.globalAlpha = 1;
   }
 
+  function snakeCovered() {
+    return active !== 'snake' || state === 'paused';
+  }
+
   function frame(now) {
     const delta = lastFrame ? Math.min(now - lastFrame, 250) : 0;
     lastFrame = now;
@@ -680,40 +802,102 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
         }
       }
     }
-    if (state === 'unlocking') advanceUnlock(now, delta);
+    if (state === 'unlocking' && unlock && unlock.phase !== 'drop') advanceUnlock(now, delta);
+    if (leaving) advanceLeave(now);
+    if (flight && now - flight.at >= flight.dur) {
+      const { land } = flight;
+      flight = null;
+      fx.hidden = true;
+      land(now);
+    }
+    if (finalAt !== null && now >= finalAt) {
+      finalAt = null;
+      startFinal(now);
+    }
     if (state === 'over' && !statusShown && now - overAt >= STATUS_DELAY_MS) {
       statusShown = true;
       showStatus();
     }
     runner.update(delta, now);
-    draw();
-    runner.draw(now);
+    bricks.update(delta, now);
+    match.update(delta, now);
+    if (match.isOn()) {
+      match.draw(now);
+    } else {
+      draw();
+      runner.draw(now);
+      bricks.draw(now);
+    }
     drawFx(now);
     requestAnimationFrame(frame);
   }
 
-  function layout() {
-    const main = document.querySelector('main');
-    const availWidth = boardEl.clientWidth;
-    // Everything but the two boards keeps its height; they share the rest.
-    const chrome = main.offsetHeight - canvas.offsetHeight - runnerCanvas.offsetHeight;
-    const availHeight = Math.max(240, window.innerHeight - chrome);
-    const w = BOARD_COLS * PITCH;
-    const h = BOARD_ROWS * PITCH;
-    const strip = ROWS * PITCH; // the strip below runs flat on any screen
-    const flat = Math.min(availWidth / w, availHeight / (h + strip));
-    const upright = Math.min(availWidth / h, availHeight / (w + strip));
-    // On a tall, narrow screen the graph stands on its side: weeks run downwards.
-    rotated = upright > flat * 1.2;
-    scale = rotated ? upright : flat;
-    dpr = window.devicePixelRatio || 1;
-    const cssW = (rotated ? h : w) * scale;
-    const cssH = (rotated ? w : h) * scale;
+  // Everything on the page but the boards, which share what is left.
+  function chromeHeight() {
+    const style = getComputedStyle(mainEl);
+    let h = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    h += headerEl.offsetHeight + parseFloat(getComputedStyle(headerEl).marginBottom);
+    for (const section of Object.values(sections)) {
+      h += section.offsetHeight - section.querySelector('.board').offsetHeight;
+    }
+    return h + 2 * MIN_GAP;
+  }
+
+  function setSnakeCanvas(cssW, cssH) {
     canvas.style.width = `${cssW}px`;
     canvas.style.height = `${cssH}px`;
     canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
-    runner.layout(rotated ? availWidth : w * scale, strip * scale, scale, dpr);
+  }
+
+  function layout() {
+    const availWidth = gamesEl.clientWidth;
+    dpr = window.devicePixelRatio || 1;
+    narrow = availWidth < NARROW_PX;
+    // On a phone the board being played takes the room; the others shrink to a row.
+    for (const [name, section] of Object.entries(sections)) {
+      section.classList.toggle('compact', narrow && name !== active);
+    }
+    const availHeight = Math.max(320, window.innerHeight - chromeHeight());
+    const w = BOARD_COLS * PITCH;
+    const h = BOARD_ROWS * PITCH;
+    const strip = ROWS * PITCH;
+    const wall = BRICK_ROWS * PITCH;
+
+    if (!narrow) {
+      rotated = false;
+      scale = Math.min(availWidth / w, availHeight / (h + strip + wall));
+      setSnakeCanvas(w * scale, h * scale);
+      runner.layout(w * scale, strip * scale, scale, dpr);
+      bricks.layout(w * scale, wall * scale, scale, dpr, BOARD_COLS, BRICK_ROWS);
+      cellPx = PITCH * scale;
+    } else {
+      const small = availWidth / w; // a whole row of the graph across
+      const rowH = h * small;
+      const room = Math.max(200, availHeight - 2 * rowH);
+      if (active === 'snake') {
+        // Standing on its side, weeks running downwards.
+        rotated = true;
+        scale = Math.min(availWidth / h, room / w);
+        setSnakeCanvas(h * scale, w * scale);
+      } else {
+        rotated = false;
+        scale = small;
+        setSnakeCanvas(w * small, rowH);
+      }
+      if (active === 'runner') {
+        const s = Math.min(room / strip, availWidth / (PHONE_BRICK_COLS * PITCH));
+        runner.layout(availWidth, strip * s, s, dpr);
+      } else {
+        runner.layout(w * small, rowH, small, dpr);
+      }
+      const bs = availWidth / (PHONE_BRICK_COLS * PITCH);
+      const bRows = clamp(Math.floor(room / (PITCH * bs)), 16, 34);
+      if (active === 'bricks') bricks.layout(availWidth, bRows * PITCH * bs, bs, dpr, PHONE_BRICK_COLS, bRows);
+      else bricks.layout(w * small, rowH, small, dpr, PHONE_BRICK_COLS, bRows);
+      cellPx = clamp(availWidth / 26, 11, 18);
+    }
+    if (match.isOn()) match.layout(cellPx, dpr);
   }
 
   // ---------- page ----------
@@ -727,18 +911,18 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
 
   function showStatus() {
     const touch = touchQuery.matches;
-    // While the strip below has the keys, a click brings the snake back.
-    const idle = active !== 'snake' && !touch;
     const messages = {
       loading: 'Loading the graph…',
-      ready: idle ? 'Click to play' : touch ? 'Swipe to start' : 'Press an arrow key to start',
+      ready: touch ? 'Swipe to start' : 'Press an arrow key to start',
       running: '',
       unlocking: '',
-      paused: idle ? 'Paused. Click to go on' : touch ? 'Paused. Swipe to go on' : 'Paused. Press Space or an arrow key',
-      over: `Game over: ${score} points. ${idle ? 'Click' : touch ? 'Tap' : 'Press Space'} to play again`,
+      paused: '',
+      over: `Game over: ${score} points. ${touch ? 'Tap' : 'Press Space'} to play again`,
       error: 'The graph could not be loaded. Try again later.',
     };
-    statusEl.textContent = state === 'over' && !statusShown ? '' : messages[state];
+    // A board under its play icon says nothing.
+    const quiet = (active !== 'snake' && state !== 'loading' && state !== 'error') || (state === 'over' && !statusShown);
+    statusEl.textContent = quiet ? '' : messages[state];
   }
 
   function readBest() {
@@ -775,19 +959,73 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
 
   // ---------- which game has the keys ----------
 
+  const GAMES = ['snake', 'runner', 'bricks'];
+
+  function isOpen(name) {
+    if (name === 'snake') return true;
+    if (name === 'runner') return runner.isOpen();
+    if (name === 'bricks') return bricks.isOpen();
+    return match.isOn();
+  }
+
+  function covered(name) {
+    if (name === 'snake') return snakeCovered();
+    if (name === 'runner') return runner.covered();
+    if (name === 'bricks') return bricks.covered();
+    return match.state === 'paused';
+  }
+
+  function pauseGame(name) {
+    if (name === 'snake') pause();
+    else if (name === 'runner') runner.pause();
+    else if (name === 'bricks') bricks.pause();
+    else match.pause();
+  }
+
+  function resumeGame(name, now) {
+    if (name === 'snake') {
+      if (state === 'paused') start();
+    } else if (name === 'runner') runner.resume();
+    else if (name === 'bricks') bricks.resume();
+    else match.resume(now);
+  }
+
+  // A board changes hands mid-way only between its own moves.
+  const switching = () => unlock !== null || leaving !== null || flight !== null || finalAt !== null || match.isOn();
+
   function setActive(name) {
-    // The locked strip can take the keys too; they only shake its lock.
     if (name === active) return;
+    // The board left behind pauses and shows its play icon.
+    pauseGame(active);
     active = name;
-    if (name === 'runner') pause();
-    else runner.pause();
     runner.setActive(name === 'runner');
-    boardEl.classList.toggle('idle', name !== 'snake');
-    runnerBoard.classList.toggle('idle', name !== 'runner' && runner.isOpen());
+    bricks.setActive(name === 'bricks');
     showStatus();
+    if (narrow) layout();
+  }
+
+  // A play icon pressed, or its number typed: go on with that game.
+  function continueGame(name, now) {
+    setActive(name);
+    resumeGame(name, now);
+    ignoreTouchUntil = now + TOUCH_SETTLE_MS;
+  }
+
+  function togglePause(now, onlyPause) {
+    if (covered(active) && active !== 'match' && !onlyPause) resumeGame(active, now);
+    else if (active === 'match' && match.state === 'paused') {
+      if (!onlyPause) match.resume(now);
+    } else pauseGame(active);
+  }
+
+  function lockedAt(el) {
+    if (el === runnerBoard && !runner.isOpen()) return runner;
+    if (el === bricksBoard && !bricks.isOpen()) return bricks;
+    return null;
   }
 
   const JUMP_KEYS = new Set([' ', 'ArrowUp', 'w']);
+  const GAME_KEYS = new Set([' ', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd']);
 
   function keyName(event) {
     return event.key.length === 1 ? event.key.toLowerCase() : event.key;
@@ -795,26 +1033,46 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
 
   window.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
-    // Enter on the link back to the profile should still follow it.
-    if (event.key === 'Enter' && event.target.closest?.('a')) return;
+    // Enter on the link back to the profile, or on a button, does what it says.
+    if (event.key === 'Enter' && event.target.closest?.('a, button')) return;
     const name = keyName(event);
+    const now = performance.now();
+    if (name === 'p' || name === 'Escape') {
+      event.preventDefault();
+      if (!event.repeat) togglePause(now, name === 'Escape');
+      return;
+    }
+    if (name === '1' || name === '2' || name === '3') {
+      const game = GAMES[Number(name) - 1];
+      if (isOpen(game) && !switching()) continueGame(game, now);
+      return;
+    }
+    // A key on a locked board only shakes its lock.
+    const locked = lockedAt(document.activeElement);
+    if (locked && GAME_KEYS.has(name)) {
+      event.preventDefault();
+      locked.nudge(now);
+      return;
+    }
+    if (active === 'match') {
+      if (match.keydown(name, now)) event.preventDefault();
+      return;
+    }
+    if (active === 'bricks') {
+      if (GAME_KEYS.has(name)) event.preventDefault();
+      if (!event.repeat) bricks.keydown(name, now);
+      return;
+    }
     if (active === 'runner') {
       if (JUMP_KEYS.has(name) || name === 'Enter') {
         event.preventDefault();
         if (event.repeat) return;
-        if (name === 'Enter') runner.primary(performance.now());
-        else runner.press(performance.now());
-        return;
+        if (name === 'Enter') runner.primary(now);
+        else runner.press(now);
+      } else if (GAME_KEYS.has(name)) {
+        event.preventDefault();
       }
-      if (name === 'Escape' || name === 'p') {
-        runner.pause();
-        return;
-      }
-      if (!KEYS[name]) return;
-      // A key only the snake uses brings it back, unless a run is under way.
-      event.preventDefault();
-      if (runner.busy()) return;
-      setActive('snake');
+      return;
     }
     const d = KEYS[name];
     if (d) {
@@ -825,51 +1083,113 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
       event.preventDefault();
       // Holding Space would otherwise pause and resume over and over.
       if (!event.repeat) primary();
-    } else if (event.key === 'Escape' || event.key === 'p') {
-      pause();
     }
   });
 
   window.addEventListener('keyup', (event) => {
-    if (active === 'runner' && JUMP_KEYS.has(keyName(event))) runner.release();
+    const name = keyName(event);
+    if (active === 'runner' && JUMP_KEYS.has(name)) runner.release();
+    else if (active === 'bricks') bricks.keyup(name);
+    else if (active === 'match') match.keyup(name);
   });
 
-  // The strip below: a press is a jump, and letting go early keeps it low.
-  runnerBoard.addEventListener('pointerdown', (event) => {
-    if (event.button > 0 || runner.state === 'arriving') return;
-    setActive('runner');
+  function local(event, el) {
+    const rect = el.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  function capture(el, event) {
     try {
-      // Letting go off the strip still ends the jump.
-      runnerBoard.setPointerCapture(event.pointerId);
+      // Letting go off the board still counts as letting go.
+      el.setPointerCapture(event.pointerId);
     } catch {
-      // Nothing to hold on to; pointerup on the strip does the same.
+      // Nothing to hold on to; pointerup on the board does the same.
     }
+  }
+
+  // A press on a board: the lock shakes, a play icon goes on with its game,
+  // otherwise the game takes it.
+  function boardDown(name, event) {
+    if (event.button > 0) return false;
+    const now = performance.now();
+    if (!isOpen(name)) {
+      (name === 'runner' ? runner : bricks).nudge(now);
+      return false;
+    }
+    if (switching()) return false;
+    if (covered(name)) {
+      event.preventDefault();
+      continueGame(name, now);
+      return false;
+    }
+    return true;
+  }
+
+  boardEl.addEventListener('pointerdown', (event) => boardDown('snake', event));
+
+  // The strip: a press is a jump, and letting go early keeps it low.
+  runnerBoard.addEventListener('pointerdown', (event) => {
+    if (!boardDown('runner', event) || active !== 'runner') return;
+    capture(runnerBoard, event);
     runner.press(performance.now());
   });
   for (const type of ['pointerup', 'pointercancel']) runnerBoard.addEventListener(type, () => runner.release());
-  runnerBoard.addEventListener('focus', () => setActive('runner'));
 
-  // A click on the snake's board while the strip below had the keys.
-  boardEl.addEventListener('pointerdown', (event) => {
-    if (event.pointerType !== 'mouse' || active === 'snake' || state === 'unlocking') return;
-    setActive('snake');
-    if (state === 'paused') start();
-    else if (state === 'over') primary();
+  // The wall: a finger or the mouse leads the paddle; a tap launches.
+  bricksBoard.addEventListener('pointerdown', (event) => {
+    if (!boardDown('bricks', event) || active !== 'bricks') return;
+    capture(bricksBoard, event);
+    const p = local(event, bricksCanvas);
+    bricks.pointer('down', p.x, p.y, performance.now(), true);
   });
-  boardEl.addEventListener('focus', () => {
-    if (state !== 'unlocking') setActive('snake');
+  bricksBoard.addEventListener('pointermove', (event) => {
+    if (active !== 'bricks' || bricks.covered()) return;
+    const p = local(event, bricksCanvas);
+    bricks.pointer('move', p.x, p.y, performance.now(), event.buttons > 0);
   });
+  for (const type of ['pointerup', 'pointercancel']) {
+    bricksBoard.addEventListener(type, (event) => {
+      if (active !== 'bricks') return;
+      const p = local(event, bricksCanvas);
+      bricks.pointer('up', p.x, p.y, performance.now(), false);
+    });
+  }
 
-  const inRunner = (event) => runnerBoard.contains(event.target);
+  // The pitch: hold and drag to lead our square.
+  pitchWrap.addEventListener('pointerdown', (event) => {
+    if (event.button > 0 || event.target.closest('button')) return;
+    if (match.state === 'paused') {
+      match.resume(performance.now());
+      return;
+    }
+    capture(pitchWrap, event);
+    const p = local(event, pitchCanvas);
+    match.pointer('down', p.x, p.y);
+  });
+  pitchWrap.addEventListener('pointermove', (event) => {
+    if (event.pointerType === 'mouse' && !event.buttons) return;
+    const p = local(event, pitchCanvas);
+    match.pointer('move', p.x, p.y);
+  });
+  for (const type of ['pointerup', 'pointercancel']) pitchWrap.addEventListener(type, () => match.pointer('up'));
+
+  for (const [name, board] of [['snake', boardEl], ['runner', runnerBoard], ['bricks', bricksBoard]]) {
+    // Tabbing to a board hands it the keys; Space or Enter then goes on.
+    board.addEventListener('focus', () => {
+      if (isOpen(name) && !switching()) setActive(name);
+    });
+  }
+
+  const inOtherBoard = (event) => runnerBoard.contains(event.target) || bricksBoard.contains(event.target);
 
   let touchStart = null;
   let swiped = false;
-  boardEl.parentElement.addEventListener(
+  mainEl.addEventListener(
     'touchstart',
     (event) => {
       touchStart = null;
-      if (inRunner(event) || state === 'unlocking') return;
-      setActive('snake');
+      if (active !== 'snake' || snakeCovered() || inOtherBoard(event) || state === 'unlocking') return;
+      if (performance.now() < ignoreTouchUntil) return;
       const t = event.touches[0];
       touchStart = { x: t.clientX, y: t.clientY };
       swiped = false;
@@ -881,7 +1201,7 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? RIGHT : LEFT) : dy > 0 ? DOWN : UP;
   }
 
-  boardEl.parentElement.addEventListener(
+  mainEl.addEventListener(
     'touchmove',
     (event) => {
       if (!touchStart) return;
@@ -896,7 +1216,7 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     },
     { passive: false },
   );
-  boardEl.parentElement.addEventListener('touchend', (event) => {
+  mainEl.addEventListener('touchend', (event) => {
     if (touchStart && !swiped && !event.target.closest('a')) {
       // A quick, short flick still steers; only a still finger is a tap.
       const t = event.changedTouches[0];
@@ -908,28 +1228,25 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     touchStart = null;
   });
 
-  // Leaving the tab or the window pauses, so the snake never runs on unseen.
+  // Leaving the tab or the window pauses, so nothing runs on unseen.
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) return;
-    pause();
-    runner.pause();
+    if (document.hidden) pauseGame(active);
   });
-  window.addEventListener('blur', () => {
-    pause();
-    runner.pause();
-  });
+  window.addEventListener('blur', () => pauseGame(active));
   darkQuery.addEventListener('change', applyPalette);
   touchQuery.addEventListener('change', () => {
     showStatus();
     runner.showStatus();
+    bricks.showStatus();
+    match.showStatus();
   });
-  // The canvas sets the board's height, so only a change of width re-lays it out.
+  // The canvases set the boards' heights, so only a change of width re-lays them out.
   let observedWidth = 0;
   new ResizeObserver(() => {
-    if (boardEl.clientWidth === observedWidth) return;
-    observedWidth = boardEl.clientWidth;
+    if (gamesEl.clientWidth === observedWidth) return;
+    observedWidth = gamesEl.clientWidth;
     layout();
-  }).observe(boardEl);
+  }).observe(gamesEl);
   window.addEventListener('resize', layout);
 
   layout();
