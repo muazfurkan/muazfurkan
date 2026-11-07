@@ -26,12 +26,29 @@ About two and a half years in, heading deliberately toward AI and agentic engine
 Python · LangGraph · LangChain · n8n · PyTorch · scikit-learn · FastAPI · Docker ·
 PostgreSQL · Java / Spring Boot · TypeScript / Angular
 
+On my own projects: Swift / SwiftUI · TypeScript
+
 ### What's here
 
-Not much, honestly. The professional work lives in private repositories, so this profile
-is mostly an archive of university coursework from 2022-2023. Eight separate assignment
-repositories are now one — the work moved rather than went away — and some of it contains
-instructive failures I'd rather document than hide.
+The professional work lives in private repositories. What's public is what I build on my
+own time, under [LJASP](https://github.com/LJASP-studio), and an archive of university
+coursework.
+
+**Building now**
+
+- **[Cumba](https://github.com/LJASP-studio/Cumba)** — an open-source (MIT) macOS app that
+  turns the MacBook notch into a panel: a mini player for whatever is playing, Claude Code
+  and Codex progress and approvals, widgets in tabs, and themes. Written in Swift, sends no
+  telemetry. [cumbanotch.com](https://cumbanotch.com) ·
+  `brew install --cask ljasp-studio/cumba/cumba`
+- **[LJASP](https://play.ljasp.com)** — a deterministic football management simulation in
+  the browser: the engine plays out every decision the same way each time. The code is
+  private; the daily puzzle below comes from it.
+
+**Archive, 2022-2023**
+
+Eight separate assignment repositories are now one — the work moved rather than went away —
+and some of it contains instructive failures I'd rather document than hide.
 
 - **[ml-coursework](https://github.com/muazfurkan/ml-coursework)** — eight ML assignments
   collected into one repository: GANs, GRUs, autoencoders, dimensionality reduction. The
