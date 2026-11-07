@@ -92,14 +92,10 @@ canvas {
   display: block;
 }
 
+/* The board without the keys dims instead of a focus ring around the one
+   being played. */
 .board {
   outline: none;
-}
-
-.board:focus-visible {
-  outline: 2px solid var(--link);
-  outline-offset: 6px;
-  border-radius: 4px;
 }
 
 .board canvas {
@@ -111,8 +107,18 @@ canvas {
   opacity: 0.6;
 }
 
-.strip {
-  margin-top: 16px;
+/* Two games, two blocks: clear room between them. */
+.game + .game {
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 1px solid var(--pill-border);
+}
+
+@media (max-width: 600px) {
+  .game + .game {
+    margin-top: 24px;
+    padding-top: 20px;
+  }
 }
 
 .lockline,
@@ -142,7 +148,7 @@ canvas {
   width: 9px;
   height: 9px;
   border-radius: 2px;
-  background: var(--cell, var(--pill-border));
+  background: var(--pill-border);
 }
 
 .bar i.on {

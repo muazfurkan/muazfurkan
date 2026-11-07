@@ -22,34 +22,37 @@
         <span>Length <b id="length">4</b></span>
       </p>
     </header>
-    <div class="board" id="board" tabindex="0">
-      <canvas id="canvas" role="img" aria-label="A contribution graph with a snake on it"></canvas>
-      <div class="overlay"><p class="status" id="status" aria-live="polite">Loading the graph…</p></div>
-    </div>
-    <div class="board strip" id="runner-board" tabindex="-1">
-      <canvas id="runner-canvas" role="img" aria-label="A locked strip of the graph that opens at 200 points"></canvas>
-      <div class="overlay"><p class="status" id="runner-status" aria-live="polite"></p></div>
-    </div>
-    <p class="lockline" id="lockline">
-      <span>Opens at 200 points</span>
-      <span class="bar" id="bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-      <span>Best <b id="progress">0</b></span>
-    </p>
-    <p class="runline" id="runline" hidden>
-      <span>
-        <span class="keys">Space, ↑ or W to jump. Hold it to jump higher.</span>
-        <span class="touch">Tap to jump. Hold it to jump higher.</span>
-      </span>
-      <span class="stats">
-        <span>Score <b id="run-score">0</b></span>
-        <span>Best <b id="run-best">0</b></span>
-      </span>
-    </p>
-    <p class="hint" id="hint">
-      <span class="keys">Arrow keys or WASD to steer, Space to pause.</span>
-      <span class="touch">Swipe to steer, tap to pause.</span>
-      Darker cells are worth more and the orange ones are the newest days. Eaten cells grow back.
-    </p>
+    <section class="game">
+      <div class="board" id="board" tabindex="0">
+        <canvas id="canvas" role="img" aria-label="A contribution graph with a snake on it"></canvas>
+        <div class="overlay"><p class="status" id="status" aria-live="polite">Loading the graph…</p></div>
+      </div>
+      <p class="hint" id="hint">
+        <span class="keys">Arrow keys or WASD to steer, Space to pause.</span>
+        <span class="touch">Swipe to steer, tap to pause.</span>
+        Darker cells are worth more and the orange ones are the newest days. Eaten cells grow back.
+      </p>
+    </section>
+    <section class="game">
+      <div class="board" id="runner-board" tabindex="-1">
+        <canvas id="runner-canvas" role="img" aria-label="A locked strip of the graph that opens when the snake scores 200"></canvas>
+        <div class="overlay"><p class="status" id="runner-status" aria-live="polite"></p></div>
+      </div>
+      <p class="lockline" id="lockline">
+        <span>Opens when the snake scores 200 in one game</span>
+        <span class="bar" id="bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      </p>
+      <p class="runline" id="runline" hidden>
+        <span>
+          <span class="keys">Space, ↑ or W to jump. Hold it to jump higher.</span>
+          <span class="touch">Tap to jump. Hold it to jump higher.</span>
+        </span>
+        <span class="stats">
+          <span>Score <b id="run-score">0</b></span>
+          <span>Best <b id="run-best">0</b></span>
+        </span>
+      </p>
+    </section>
     <noscript><p class="hint">The game needs JavaScript.</p></noscript>
   </main>
   <canvas id="fx" aria-hidden="true" hidden></canvas>

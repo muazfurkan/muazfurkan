@@ -124,14 +124,12 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     statusEl: document.getElementById('runner-status'),
     lockline: document.getElementById('lockline'),
     bar: document.getElementById('bar'),
-    progressEl: document.getElementById('progress'),
     runline: document.getElementById('runline'),
     scoreEl: document.getElementById('run-score'),
     bestEl: document.getElementById('run-best'),
     palette: () => palettes && palette(),
     calm: calmQuery,
     touch: touchQuery,
-    earned: best >= UNLOCK_SCORE,
   });
 
   // ---------- loading ----------
@@ -271,7 +269,6 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
       if (score > best) {
         best = score;
         writeBest(best);
-        runner.showProgress(best);
       }
       if (score >= UNLOCK_SCORE && !runner.isOpen() && state === 'running') beginUnlock();
     }
@@ -340,7 +337,6 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     if (best !== undo.best) {
       best = undo.best;
       writeBest(best);
-      runner.showProgress(best);
     }
     dir = d;
     move(next);
@@ -499,12 +495,10 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     return darkQuery.matches ? palettes.dark : palettes.light;
   }
 
-  // The progress squares under the lock take the graph's own colours.
+  // The progress squares under the lock fill in the graph's own green.
   function applyPalette() {
     if (!palettes) return;
-    const pal = palette();
-    document.documentElement.style.setProperty('--cell', pal['--ce']);
-    document.documentElement.style.setProperty('--cell-on', pal['--c4']);
+    document.documentElement.style.setProperty('--cell-on', palette()['--c4']);
   }
 
   function hexToRgb(hex) {
@@ -719,6 +713,7 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
     scoreEl.textContent = String(score);
     bestEl.textContent = String(best);
     lengthEl.textContent = String(snake.length + grow);
+    runner.showProgress(score);
   }
 
   function showStatus() {
@@ -772,13 +767,14 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
   // ---------- which game has the keys ----------
 
   function setActive(name) {
-    if (name === active || (name === 'runner' && !runner.isOpen())) return;
+    // The locked strip can take the keys too; they only shake its lock.
+    if (name === active) return;
     active = name;
     if (name === 'runner') pause();
     else runner.pause();
     runner.setActive(name === 'runner');
     boardEl.classList.toggle('idle', name !== 'snake');
-    runnerBoard.classList.toggle('idle', name !== 'runner');
+    runnerBoard.classList.toggle('idle', name !== 'runner' && runner.isOpen());
     showStatus();
   }
 
@@ -831,12 +827,7 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
 
   // The strip below: a press is a jump, and letting go early keeps it low.
   runnerBoard.addEventListener('pointerdown', (event) => {
-    if (event.button > 0) return;
-    if (!runner.isOpen()) {
-      runner.nudge(performance.now());
-      return;
-    }
-    if (runner.state === 'arriving') return;
+    if (event.button > 0 || runner.state === 'arriving') return;
     setActive('runner');
     try {
       // Letting go off the strip still ends the jump.
@@ -932,8 +923,6 @@ import { createRunner, UNLOCK_SCORE } from './runner.js';
   }).observe(boardEl);
   window.addEventListener('resize', layout);
 
-  if (runner.isOpen()) runnerBoard.classList.add('idle');
-  runner.showProgress(best);
   layout();
   updateStats();
   requestAnimationFrame(frame);

@@ -1,6 +1,7 @@
 // A second strip under the snake: one square runs along its own stretch of
-// graph and jumps over blocks and gaps. It opens once a snake run reaches
-// UNLOCK_SCORE points and stays open on later visits.
+// graph and jumps over blocks and gaps. It opens when a snake run reaches
+// UNLOCK_SCORE points and stays open until the page is left; every visit
+// starts locked.
 
 export const UNLOCK_SCORE = 200;
 
@@ -50,8 +51,9 @@ const SETTLE_MS = 300; // a fall eases the world to rest
 const WIGGLE_MS = 380;
 const APPEAR_MS = 300;
 
-const OPEN_KEY = 'contribution-runner-open';
 const BEST_KEY = 'contribution-runner-best';
+// An earlier version kept the strip open across visits under this key.
+const OLD_OPEN_KEY = 'contribution-runner-open';
 
 // The lock, five cells wide and as tall as the strip.
 const LOCK = ['.###.', '#...#', '#...#', '#####', '##.##', '##.##', '#####'];
@@ -111,13 +113,22 @@ function write(key, value) {
   }
 }
 
-export function createRunner({ board, canvas, statusEl, lockline, bar, progressEl, runline, scoreEl, bestEl, palette, calm, touch, earned }) {
+function forget(key) {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Nothing stored, or no storage at all.
+  }
+}
+
+export function createRunner({ board, canvas, statusEl, lockline, bar, runline, scoreEl, bestEl, palette, calm, touch }) {
   const ctx = canvas.getContext('2d');
 
-  let open = read(OPEN_KEY) === '1' || earned;
-  if (open) write(OPEN_KEY, '1');
+  forget(OLD_OPEN_KEY);
+  let open = false; // only a snake run on this page opens it
   // locked | arriving | ready | running | paused | ending | over
-  let state = open ? 'ready' : 'locked';
+  let state = 'locked';
+  let filled = -1;
   let active = false;
   let greeting = false; // the first prompt after opening says so
 
@@ -578,8 +589,13 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, progressE
       'aria-label',
       open
         ? 'A second strip of the graph, where a square runs and jumps'
-        : `A locked strip of the graph that opens at ${UNLOCK_SCORE} points`,
+        : `A locked strip of the graph that opens when the snake scores ${UNLOCK_SCORE}`,
     );
+  }
+
+  // While locked, anything aimed at the strip only shakes the lock.
+  function nudge(now) {
+    if (!calm.matches) wiggleAt = now;
   }
 
   resetRun();
@@ -598,10 +614,12 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, progressE
     layout,
     showStatus,
 
-    showProgress(snakeBest) {
-      progressEl.textContent = String(Math.min(snakeBest, UNLOCK_SCORE));
-      const filled = Math.min(10, Math.floor((snakeBest / UNLOCK_SCORE) * 10));
-      [...bar.children].forEach((cell, i) => cell.classList.toggle('on', i < filled));
+    // How far the snake's current run has got toward opening the strip.
+    showProgress(runScore) {
+      const cells = Math.min(10, Math.floor((runScore / UNLOCK_SCORE) * 10));
+      if (cells === filled) return;
+      filled = cells;
+      [...bar.children].forEach((cell, i) => cell.classList.toggle('on', i < cells));
     },
 
     setActive(value) {
@@ -611,7 +629,9 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, progressE
     },
 
     press(now) {
-      if (state === 'ready' || state === 'paused') {
+      if (state === 'locked') {
+        nudge(now);
+      } else if (state === 'ready' || state === 'paused') {
         // The first press sets off; only later ones jump.
         state = 'running';
         greeting = false;
@@ -632,7 +652,9 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, progressE
     },
 
     primary(now) {
-      if (state === 'ready' || state === 'paused') {
+      if (state === 'locked') {
+        nudge(now);
+      } else if (state === 'ready' || state === 'paused') {
         state = 'running';
         greeting = false;
         showStatus();
@@ -651,16 +673,10 @@ export function createRunner({ board, canvas, statusEl, lockline, bar, progressE
       showStatus();
     },
 
-    // A click on the locked strip: the lock gives a little shake.
-    nudge(now) {
-      if (state === 'locked' && !calm.matches) wiggleAt = now;
-    },
-
     // The snake reached the score: the lock breaks and the strip lights up.
     openUp(now) {
       if (open) return;
       open = true;
-      write(OPEN_KEY, '1');
       state = 'arriving';
       openAt = now;
       greeting = true;
