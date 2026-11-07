@@ -24,6 +24,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -86,6 +90,72 @@ a:hover {
 
 canvas {
   display: block;
+}
+
+.board {
+  outline: none;
+}
+
+.board:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
+.board canvas {
+  transition: opacity 0.2s;
+}
+
+/* The board that does not have the keys steps back a little. */
+.board.idle canvas {
+  opacity: 0.6;
+}
+
+.strip {
+  margin-top: 16px;
+}
+
+.lockline,
+.runline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  margin: 12px 0 0;
+  color: var(--muted);
+}
+
+.lockline {
+  justify-content: center;
+}
+
+.runline {
+  justify-content: space-between;
+}
+
+.bar {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.bar i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--cell, var(--pill-border));
+}
+
+.bar i.on {
+  background: var(--cell-on, var(--link));
+}
+
+#fx {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .overlay {

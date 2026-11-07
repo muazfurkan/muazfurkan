@@ -4,7 +4,7 @@
 // night by the snake workflow), so the cells, their colours and the newest-day
 // highlight always match what the profile shows.
 
-'use strict';
+import { createRunner, UNLOCK_SCORE } from './runner.js';
 
 (() => {
   const PITCH = 16; // one cell in the SVG, gap included
@@ -41,6 +41,12 @@
   const RESTART_GUARD_MS = 700;
   const SWIPE_PX = 18;
   const FLICK_PX = 8;
+  // Reaching UNLOCK_SCORE: the snake reels into its head, the lock below
+  // breaks, and the head drops into the strip as the runner.
+  const CURL_MS = 480;
+  const OPEN_DELAY_MS = 150;
+  const DROP_MS = 560;
+  const APPEAR_MS = 400;
 
   const POINTS = { '--c1': 1, '--c2': 2, '--c3': 3, '--c4': 4, '--hl': 5 };
   // Inset, size and corner radius of the first segments, as snk draws them.
@@ -72,6 +78,10 @@
   const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
   const touchQuery = window.matchMedia('(pointer: coarse)');
   const calmQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const runnerBoard = document.getElementById('runner-board');
+  const runnerCanvas = document.getElementById('runner-canvas');
+  const fx = document.getElementById('fx');
+  const fxCtx = fx.getContext('2d');
 
   let palettes = null; // { light: {...vars}, dark: {...vars} }
   let cells = []; // { col, row, fillVar, points, eatenAt }
@@ -84,7 +94,7 @@
   let grow = 0;
   let score = 0;
   let best = readBest();
-  let state = 'loading'; // loading | ready | running | paused | over | error
+  let state = 'loading'; // loading | ready | running | paused | unlocking | over | error
   let tickMs = START_TICK_MS;
   let sinceTick = 0;
   let clock = 0; // game time, only advances while running
@@ -103,6 +113,26 @@
   let rotated = false;
   let scale = 1;
   let dpr = 1;
+
+  let active = 'snake'; // the game that takes the keys: snake | runner
+  let unlock = null; // { phase: 'finish' | 'curl' | 'drop', at, opened, from, to }
+  let appearAt = null; // the snake fades back in after it became the runner
+
+  const runner = createRunner({
+    board: runnerBoard,
+    canvas: runnerCanvas,
+    statusEl: document.getElementById('runner-status'),
+    lockline: document.getElementById('lockline'),
+    bar: document.getElementById('bar'),
+    progressEl: document.getElementById('progress'),
+    runline: document.getElementById('runline'),
+    scoreEl: document.getElementById('run-score'),
+    bestEl: document.getElementById('run-best'),
+    palette: () => palettes && palette(),
+    calm: calmQuery,
+    touch: touchQuery,
+    earned: best >= UNLOCK_SCORE,
+  });
 
   // ---------- loading ----------
 
@@ -147,6 +177,7 @@
         throw new Error(`expected ${COLS * ROWS} cells, found ${light.cells.length}`);
       }
       palettes = { light: light.vars, dark: dark.vars };
+      applyPalette();
       cells = light.cells.map((cell) => ({
         ...cell,
         points: cell.fillVar ? POINTS[cell.fillVar] ?? 1 : 0,
@@ -240,7 +271,9 @@
       if (score > best) {
         best = score;
         writeBest(best);
+        runner.showProgress(best);
       }
+      if (score >= UNLOCK_SCORE && !runner.isOpen() && state === 'running') beginUnlock();
     }
     updateStats();
     return before;
@@ -307,6 +340,7 @@
     if (best !== undo.best) {
       best = undo.best;
       writeBest(best);
+      runner.showProgress(best);
     }
     dir = d;
     move(next);
@@ -314,6 +348,93 @@
     // From where it is drawn now, the head cuts the corner to its new cell.
     headFrom = { c: drawn.c, r: drawn.r, t: moveT() };
     return true;
+  }
+
+  // ---------- opening the strip below ----------
+
+  function beginUnlock() {
+    state = 'unlocking';
+    queue = [];
+    unlock = { phase: 'finish', at: performance.now() };
+    showStatus();
+  }
+
+  function advanceUnlock(now, delta) {
+    if (unlock.phase === 'finish') {
+      // Let the current move end before the snake reels in.
+      sinceTick = Math.min(tickMs, sinceTick + delta);
+      if (sinceTick >= tickMs) unlock = { phase: 'curl', at: now, opened: false };
+      return;
+    }
+    if (unlock.phase === 'curl') {
+      if (!unlock.opened && now - unlock.at >= OPEN_DELAY_MS) {
+        runner.openUp(now);
+        unlock.opened = true;
+      }
+      if (now - unlock.at < CURL_MS) return;
+      if (calmQuery.matches) {
+        finishUnlock(now);
+        return;
+      }
+      unlock = { phase: 'drop', at: now, opened: true, from: headRect(), to: runner.dropTarget() };
+      fx.width = Math.round(window.innerWidth * dpr);
+      fx.height = Math.round(window.innerHeight * dpr);
+      fx.hidden = false;
+      return;
+    }
+    if (now - unlock.at >= DROP_MS) finishUnlock(now);
+  }
+
+  function finishUnlock(now) {
+    unlock = null;
+    fx.hidden = true;
+    runner.arrive(now);
+    reset();
+    appearAt = now;
+    setActive('runner');
+  }
+
+  // Where the head is drawn, in page pixels.
+  function headRect() {
+    const rect = canvas.getBoundingClientRect();
+    let bx = (snake[0].c - MIN_COL + 0.5) * PITCH;
+    let by = (snake[0].r - MIN_ROW + 0.5) * PITCH;
+    if (rotated) [bx, by] = [by, bx];
+    return { x: rect.left + bx * scale, y: rect.top + by * scale, size: SEGMENTS[0][1] * scale };
+  }
+
+  // Segment i reeled toward the head along the body, p from 0 to 1.
+  function curlPos(i, p) {
+    const d = i * p;
+    const k = Math.floor(d);
+    const a = snake[i - k];
+    const b = snake[Math.max(0, i - k - 1)];
+    return { c: a.c + (b.c - a.c) * (d - k), r: a.r + (b.r - a.r) * (d - k) };
+  }
+
+  function drawFx(now) {
+    if (unlock?.phase !== 'drop' || !palettes) return;
+    const { from, to } = unlock;
+    const p = Math.min(1, (now - unlock.at) / DROP_MS);
+    const along = p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2;
+    // A small hop, then down the way things fall.
+    const cx = from.x + (to.x - from.x) * along;
+    const cy = from.y + (to.y - from.y) * p * p - 4 * p * (1 - p) * to.size;
+    const size = from.size + (to.size - from.size) * p;
+    fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    fxCtx.clearRect(0, 0, fx.width, fx.height);
+    fxCtx.fillStyle = palette()['--cs'] ?? 'purple';
+    const r = Math.min(size / 2, 4.5 * scale);
+    const x = cx - size / 2;
+    const y = cy - size / 2;
+    fxCtx.beginPath();
+    fxCtx.moveTo(x + r, y);
+    fxCtx.arcTo(x + size, y, x + size, y + size, r);
+    fxCtx.arcTo(x + size, y + size, x, y + size, r);
+    fxCtx.arcTo(x, y + size, x, y, r);
+    fxCtx.arcTo(x, y, x + size, y, r);
+    fxCtx.closePath();
+    fxCtx.fill();
   }
 
   function gameOver() {
@@ -347,7 +468,7 @@
   }
 
   function steer(d) {
-    if (state === 'loading' || state === 'error' || state === 'over') return;
+    if (state === 'loading' || state === 'error' || state === 'over' || state === 'unlocking') return;
     const lastDir = queue.length ? queue[queue.length - 1] : dir;
     const lastMove = queue.length ? queue[queue.length - 1] : heading();
     const wanted = !opposite(d, lastMove) && !same(d, lastDir); // never back into the body
@@ -376,6 +497,14 @@
 
   function palette() {
     return darkQuery.matches ? palettes.dark : palettes.light;
+  }
+
+  // The progress squares under the lock take the graph's own colours.
+  function applyPalette() {
+    if (!palettes) return;
+    const pal = palette();
+    document.documentElement.style.setProperty('--cell', pal['--ce']);
+    document.documentElement.style.setProperty('--cell-on', pal['--c4']);
   }
 
   function hexToRgb(hex) {
@@ -430,7 +559,7 @@
 
   // How far the current move has got, from 0 to 1.
   function moveT() {
-    if (stalled || (state !== 'running' && state !== 'paused')) return 1;
+    if (stalled || (state !== 'running' && state !== 'paused' && state !== 'unlocking')) return 1;
     return Math.min(1, sinceTick / tickMs);
   }
 
@@ -483,15 +612,30 @@
       ctx.stroke();
     }
 
+    // While the head drops into the strip below, the board is empty.
+    if (unlock?.phase === 'drop') return;
     const t = moveT();
     const level = pressLevel(now);
-    ctx.fillStyle = pal['--cs'] ?? 'purple';
+    let curl = 0;
+    let alpha = 1;
+    if (unlock?.phase === 'curl') {
+      const p = Math.min(1, (now - unlock.at) / CURL_MS);
+      if (calmQuery.matches) alpha = 1 - p;
+      else curl = p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2;
+    }
     if (state === 'over') {
       const p = Math.min(1, (now - overAt) / FADE_MS);
-      ctx.globalAlpha = 1 - (1 - DEAD_ALPHA) * easeOut(p);
+      alpha = 1 - (1 - DEAD_ALPHA) * easeOut(p);
     }
+    if (appearAt !== null) {
+      const p = (now - appearAt) / APPEAR_MS;
+      if (p >= 1) appearAt = null;
+      else alpha *= p;
+    }
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = pal['--cs'] ?? 'purple';
     for (let i = snake.length - 1; i >= 0; i -= 1) {
-      const pos = segmentPos(i, t);
+      const pos = curl ? curlPos(i, curl) : segmentPos(i, t);
       const [inset, size, radius] = segmentShape(i);
       let w = size;
       let h = size;
@@ -533,23 +677,29 @@
         }
       }
     }
+    if (state === 'unlocking') advanceUnlock(now, delta);
     if (state === 'over' && !statusShown && now - overAt >= STATUS_DELAY_MS) {
       statusShown = true;
       showStatus();
     }
+    runner.update(delta, now);
     draw();
+    runner.draw(now);
+    drawFx(now);
     requestAnimationFrame(frame);
   }
 
   function layout() {
-    const header = document.querySelector('header');
-    const hint = document.getElementById('hint');
+    const main = document.querySelector('main');
     const availWidth = boardEl.clientWidth;
-    const availHeight = Math.max(160, window.innerHeight - header.offsetHeight - hint.offsetHeight - 80);
+    // Everything but the two boards keeps its height; they share the rest.
+    const chrome = main.offsetHeight - canvas.offsetHeight - runnerCanvas.offsetHeight;
+    const availHeight = Math.max(240, window.innerHeight - chrome);
     const w = BOARD_COLS * PITCH;
     const h = BOARD_ROWS * PITCH;
-    const flat = Math.min(availWidth / w, availHeight / h);
-    const upright = Math.min(availWidth / h, availHeight / w);
+    const strip = ROWS * PITCH; // the strip below runs flat on any screen
+    const flat = Math.min(availWidth / w, availHeight / (h + strip));
+    const upright = Math.min(availWidth / h, availHeight / (w + strip));
     // On a tall, narrow screen the graph stands on its side: weeks run downwards.
     rotated = upright > flat * 1.2;
     scale = rotated ? upright : flat;
@@ -560,6 +710,7 @@
     canvas.style.height = `${cssH}px`;
     canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
+    runner.layout(rotated ? availWidth : w * scale, strip * scale, scale, dpr);
   }
 
   // ---------- page ----------
@@ -572,12 +723,15 @@
 
   function showStatus() {
     const touch = touchQuery.matches;
+    // While the strip below has the keys, a click brings the snake back.
+    const idle = active !== 'snake' && !touch;
     const messages = {
       loading: 'Loading the graph…',
-      ready: touch ? 'Swipe to start' : 'Press an arrow key to start',
+      ready: idle ? 'Click to play' : touch ? 'Swipe to start' : 'Press an arrow key to start',
       running: '',
-      paused: touch ? 'Paused. Swipe to go on' : 'Paused. Press Space or an arrow key',
-      over: touch ? `Game over: ${score} points. Tap to play again` : `Game over: ${score} points. Press Space to play again`,
+      unlocking: '',
+      paused: idle ? 'Paused. Click to go on' : touch ? 'Paused. Swipe to go on' : 'Paused. Press Space or an arrow key',
+      over: `Game over: ${score} points. ${idle ? 'Click' : touch ? 'Tap' : 'Press Space'} to play again`,
       error: 'The graph could not be loaded. Try again later.',
     };
     statusEl.textContent = state === 'over' && !statusShown ? '' : messages[state];
@@ -615,11 +769,49 @@
     s: DOWN,
   };
 
+  // ---------- which game has the keys ----------
+
+  function setActive(name) {
+    if (name === active || (name === 'runner' && !runner.isOpen())) return;
+    active = name;
+    if (name === 'runner') pause();
+    else runner.pause();
+    runner.setActive(name === 'runner');
+    boardEl.classList.toggle('idle', name !== 'snake');
+    runnerBoard.classList.toggle('idle', name !== 'runner');
+    showStatus();
+  }
+
+  const JUMP_KEYS = new Set([' ', 'ArrowUp', 'w']);
+
+  function keyName(event) {
+    return event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  }
+
   window.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     // Enter on the link back to the profile should still follow it.
     if (event.key === 'Enter' && event.target.closest?.('a')) return;
-    const d = KEYS[event.key.length === 1 ? event.key.toLowerCase() : event.key];
+    const name = keyName(event);
+    if (active === 'runner') {
+      if (JUMP_KEYS.has(name) || name === 'Enter') {
+        event.preventDefault();
+        if (event.repeat) return;
+        if (name === 'Enter') runner.primary(performance.now());
+        else runner.press(performance.now());
+        return;
+      }
+      if (name === 'Escape' || name === 'p') {
+        runner.pause();
+        return;
+      }
+      if (!KEYS[name]) return;
+      // A key only the snake uses brings it back, unless a run is under way.
+      event.preventDefault();
+      if (runner.busy()) return;
+      setActive('snake');
+    }
+    const d = KEYS[name];
     if (d) {
       event.preventDefault();
       // A held key repeats; only the first press is a turn.
@@ -633,11 +825,51 @@
     }
   });
 
+  window.addEventListener('keyup', (event) => {
+    if (active === 'runner' && JUMP_KEYS.has(keyName(event))) runner.release();
+  });
+
+  // The strip below: a press is a jump, and letting go early keeps it low.
+  runnerBoard.addEventListener('pointerdown', (event) => {
+    if (event.button > 0) return;
+    if (!runner.isOpen()) {
+      runner.nudge(performance.now());
+      return;
+    }
+    if (runner.state === 'arriving') return;
+    setActive('runner');
+    try {
+      // Letting go off the strip still ends the jump.
+      runnerBoard.setPointerCapture(event.pointerId);
+    } catch {
+      // Nothing to hold on to; pointerup on the strip does the same.
+    }
+    runner.press(performance.now());
+  });
+  for (const type of ['pointerup', 'pointercancel']) runnerBoard.addEventListener(type, () => runner.release());
+  runnerBoard.addEventListener('focus', () => setActive('runner'));
+
+  // A click on the snake's board while the strip below had the keys.
+  boardEl.addEventListener('pointerdown', (event) => {
+    if (event.pointerType !== 'mouse' || active === 'snake' || state === 'unlocking') return;
+    setActive('snake');
+    if (state === 'paused') start();
+    else if (state === 'over') primary();
+  });
+  boardEl.addEventListener('focus', () => {
+    if (state !== 'unlocking') setActive('snake');
+  });
+
+  const inRunner = (event) => runnerBoard.contains(event.target);
+
   let touchStart = null;
   let swiped = false;
   boardEl.parentElement.addEventListener(
     'touchstart',
     (event) => {
+      touchStart = null;
+      if (inRunner(event) || state === 'unlocking') return;
+      setActive('snake');
       const t = event.touches[0];
       touchStart = { x: t.clientX, y: t.clientY };
       swiped = false;
@@ -678,11 +910,19 @@
 
   // Leaving the tab or the window pauses, so the snake never runs on unseen.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) pause();
+    if (!document.hidden) return;
+    pause();
+    runner.pause();
   });
-  window.addEventListener('blur', pause);
-  darkQuery.addEventListener('change', draw);
-  touchQuery.addEventListener('change', showStatus);
+  window.addEventListener('blur', () => {
+    pause();
+    runner.pause();
+  });
+  darkQuery.addEventListener('change', applyPalette);
+  touchQuery.addEventListener('change', () => {
+    showStatus();
+    runner.showStatus();
+  });
   // The canvas sets the board's height, so only a change of width re-lays it out.
   let observedWidth = 0;
   new ResizeObserver(() => {
@@ -692,6 +932,8 @@
   }).observe(boardEl);
   window.addEventListener('resize', layout);
 
+  if (runner.isOpen()) runnerBoard.classList.add('idle');
+  runner.showProgress(best);
   layout();
   updateStats();
   requestAnimationFrame(frame);
