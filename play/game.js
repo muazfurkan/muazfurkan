@@ -26,8 +26,21 @@
   const TICK_STEP_MS = 2; // faster with every cell eaten
   const REGROW_DELAY_MS = 6000;
   const REGROW_FADE_MS = 1500;
-  const RESTART_GUARD_MS = 400;
+  const QUEUE_SIZE = 3; // turns typed ahead, one per cell
+  // A turn pressed just after the head left a cell still turns at that cell.
+  const LATE_TURN = 0.45; // share of a move
+  // Meeting a wall or the body is not the end yet: the snake waits this long
+  // for a turn, and a turn made in time takes it on at once.
+  const GRACE_MS = 220;
+  const SETTLE_MS = 140; // the front of the snake eases up against what stopped it
+  const RELEASE_MS = 120;
+  const BOUNCE_MS = 380;
+  const FADE_MS = 650;
+  const DEAD_ALPHA = 0.35;
+  const STATUS_DELAY_MS = 450;
+  const RESTART_GUARD_MS = 700;
   const SWIPE_PX = 18;
+  const FLICK_PX = 8;
 
   const POINTS = { '--c1': 1, '--c2': 2, '--c3': 3, '--c4': 4, '--hl': 5 };
   // Inset, size and corner radius of the first segments, as snk draws them.
@@ -38,6 +51,10 @@
     [3.0, 9.9, 3.3],
   ];
   const MIN_SEGMENT = 8;
+  // How far the first segments close up when the head is stopped, in cells,
+  // and how much the head flattens against the obstacle.
+  const PRESS = [0.07, 0.11, 0.1, 0.08, 0.05, 0.03];
+  const SQUASH = 0.14;
   const BEST_KEY = 'contribution-snake-best';
 
   const LEFT = { c: -1, r: 0 };
@@ -54,14 +71,15 @@
   const lengthEl = document.getElementById('length');
   const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
   const touchQuery = window.matchMedia('(pointer: coarse)');
+  const calmQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   let palettes = null; // { light: {...vars}, dark: {...vars} }
   let cells = []; // { col, row, fillVar, points, eatenAt }
   let cellAt = new Map();
 
   let snake = [];
-  let previous = [];
-  let dir = LEFT;
+  let previous = []; // where each segment started its current move
+  let dir = RIGHT;
   let queue = [];
   let grow = 0;
   let score = 0;
@@ -72,6 +90,15 @@
   let clock = 0; // game time, only advances while running
   let lastFrame = 0;
   let overAt = 0;
+  let statusShown = true;
+
+  let undo = null; // the game before the last straight move, for a late turn
+  let headFrom = null; // where the head was drawn when a late turn bent its path
+  let stalled = false;
+  let stallMs = 0; // how long the front has been pressing, for drawing
+  let waitMs = 0; // how long the snake has waited for a turn
+  let pressVecs = null; // per segment, the way it closes up while stopped
+  let release = null; // { level, at } after the snake gets going again
 
   let rotated = false;
   let scale = 1;
@@ -140,6 +167,24 @@
     return `${col},${row}`;
   }
 
+  const same = (a, b) => a.c === b.c && a.r === b.r;
+  const opposite = (a, b) => a.c === -b.c && a.r === -b.r;
+  const ahead = (body, d) => ({ c: body[0].c + d.c, r: body[0].r + d.r });
+
+  // The way the head last moved, which can differ from `dir` while the snake
+  // is stopped after turning into a wall.
+  function heading() {
+    return { c: snake[0].c - snake[1].c, r: snake[0].r - snake[1].r };
+  }
+
+  function blocked(next, body, growing) {
+    if (next.c < MIN_COL || next.c > MAX_COL || next.r < MIN_ROW || next.r > MAX_ROW) return true;
+    // Unless the snake grows, its tail moves out of the way this same step.
+    const end = growing ? body.length : body.length - 1;
+    for (let i = 0; i < end; i += 1) if (same(body[i], next)) return true;
+    return false;
+  }
+
   function reset() {
     // Four segments, as in the README, with the whole board ahead of the head.
     snake = [0, 1, 2, 3].map((i) => ({ c: START_HEAD.c - i, r: START_HEAD.r }));
@@ -151,8 +196,16 @@
     tickMs = START_TICK_MS;
     sinceTick = 0;
     clock = 0;
+    undo = null;
+    headFrom = null;
+    stalled = false;
+    stallMs = 0;
+    waitMs = 0;
+    pressVecs = null;
+    release = null;
     for (const cell of cells) cell.eatenAt = null;
     state = 'ready';
+    statusShown = true;
     updateStats();
     showStatus();
   }
@@ -161,18 +214,11 @@
     return cell.fillVar && (cell.eatenAt === null || clock - cell.eatenAt >= REGROW_DELAY_MS);
   }
 
-  function step() {
-    if (queue.length) dir = queue.shift();
-    const head = snake[0];
-    const next = { c: head.c + dir.c, r: head.r + dir.r };
+  // Moves the head into `next` and returns what the game was before, so a
+  // late turn can take the move back.
+  function move(next) {
     const old = snake;
-
-    if (next.c < MIN_COL || next.c > MAX_COL || next.r < MIN_ROW || next.r > MAX_ROW) {
-      return gameOver();
-    }
-    const body = grow > 0 ? old : old.slice(0, -1);
-    if (body.some((p) => p.c === next.c && p.r === next.r)) return gameOver();
-
+    const before = { snake: old, previous, grow, score, best, tickMs, cell: null, eatenAt: null };
     snake = [next, ...old];
     if (grow > 0) {
       grow -= 1;
@@ -181,10 +227,13 @@
       snake.pop();
       previous = old;
     }
+    headFrom = null;
 
     const cell = cellAt.get(key(next.c, next.r));
     if (cell && edible(cell)) {
-      cell.eatenAt = clock;
+      before.cell = cell;
+      before.eatenAt = cell.eatenAt;
+      cell.eatenAt = clock + tickMs; // it empties when the head gets there
       score += cell.points;
       grow += 1;
       tickMs = Math.max(MIN_TICK_MS, tickMs - TICK_STEP_MS);
@@ -194,20 +243,101 @@
       }
     }
     updateStats();
+    return before;
+  }
+
+  function step() {
+    const turned = queue.length > 0;
+    if (turned) dir = queue.shift();
+    const next = ahead(snake, dir);
+    if (blocked(next, snake, grow > 0)) {
+      stall();
+      return;
+    }
+    const before = move(next);
+    undo = turned ? null : before;
+  }
+
+  function stall() {
+    stalled = true;
+    stallMs = 0;
+    waitMs = 0;
+    sinceTick = 0;
+    undo = null;
+    headFrom = null;
+    release = null;
+    previous = snake.map((p) => ({ ...p }));
+    pressVecs = PRESS.map((amount, i) => {
+      if (i >= snake.length) return null;
+      const d = i === 0 ? dir : { c: snake[i - 1].c - snake[i].c, r: snake[i - 1].r - snake[i].r };
+      return { c: d.c * amount, r: d.r * amount };
+    });
+  }
+
+  // While stopped, the first free turn in the queue gets the snake going again.
+  function escape() {
+    while (queue.length) {
+      const d = queue.shift();
+      const next = ahead(snake, d);
+      if (blocked(next, snake, grow > 0)) continue;
+      release = { level: pressLevel(performance.now()), at: clock };
+      stalled = false;
+      sinceTick = 0;
+      dir = d;
+      move(next);
+      undo = null;
+      return;
+    }
+  }
+
+  // The head left its cell a moment ago: take that move back and turn there.
+  function lateTurn(d) {
+    if (!undo || stalled || queue.length || sinceTick > tickMs * LATE_TURN) return false;
+    const base = undo.snake;
+    const next = ahead(base, d);
+    if (blocked(next, base, undo.grow > 0)) return false;
+
+    const drawn = segmentPos(0, moveT());
+    snake = base;
+    previous = undo.previous;
+    grow = undo.grow;
+    score = undo.score;
+    tickMs = undo.tickMs;
+    if (undo.cell) undo.cell.eatenAt = undo.eatenAt;
+    if (best !== undo.best) {
+      best = undo.best;
+      writeBest(best);
+    }
+    dir = d;
+    move(next);
+    undo = null;
+    // From where it is drawn now, the head cuts the corner to its new cell.
+    headFrom = { c: drawn.c, r: drawn.r, t: moveT() };
+    return true;
   }
 
   function gameOver() {
-    previous = snake.map((p) => ({ ...p }));
     state = 'over';
     overAt = performance.now();
-    showStatus();
+    statusShown = false;
+    queue = [];
+    statusEl.textContent = '';
   }
 
   function start() {
     if (state !== 'ready' && state !== 'paused') return;
+    const fresh = state === 'ready';
     state = 'running';
-    sinceTick = 0;
     showStatus();
+    if (fresh) {
+      // Move on the key press itself instead of one tick later.
+      sinceTick = 0;
+      step();
+    } else if (stalled) {
+      // A full wait again after a pause, so there is time to look and turn.
+      waitMs = 0;
+      if (queue.length) escape();
+    }
   }
 
   function pause() {
@@ -218,15 +348,22 @@
 
   function steer(d) {
     if (state === 'loading' || state === 'error' || state === 'over') return;
-    const last = queue.length ? queue[queue.length - 1] : dir;
-    if (d.c === -last.c && d.r === -last.r) return; // no turning back into the body
+    const lastDir = queue.length ? queue[queue.length - 1] : dir;
+    const lastMove = queue.length ? queue[queue.length - 1] : heading();
+    const wanted = !opposite(d, lastMove) && !same(d, lastDir); // never back into the body
     if (state === 'ready' || state === 'paused') {
-      if (d.c !== last.c || d.r !== last.r) queue.push(d);
+      if (wanted && queue.length < QUEUE_SIZE) queue.push(d);
       start();
       return;
     }
-    if (d.c === last.c && d.r === last.r) return;
-    if (queue.length < 2) queue.push(d);
+    if (!wanted) return;
+    if (stalled) {
+      queue.push(d);
+      escape();
+      return;
+    }
+    if (lateTurn(d)) return;
+    if (queue.length < QUEUE_SIZE) queue.push(d);
   }
 
   function primary() {
@@ -262,6 +399,7 @@
     const color = pal[cell.fillVar] ?? empty;
     if (cell.eatenAt === null) return color;
     const since = clock - cell.eatenAt;
+    if (since < 0) return color; // the head is still on its way
     if (since < REGROW_DELAY_MS) return empty;
     if (since < REGROW_DELAY_MS + REGROW_FADE_MS) {
       return mix(empty, color, (since - REGROW_DELAY_MS) / REGROW_FADE_MS);
@@ -272,6 +410,7 @@
   function roundRect(x, y, w, h, r) {
     // Board coordinates; rotation swaps the axes.
     if (rotated) [x, y, w, h] = [y, x, h, w];
+    r = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -287,7 +426,44 @@
     return [(PITCH - size) / 2, size, size * 0.33];
   }
 
+  const easeOut = (x) => 1 - (1 - x) ** 3;
+
+  // How far the current move has got, from 0 to 1.
+  function moveT() {
+    if (stalled || (state !== 'running' && state !== 'paused')) return 1;
+    return Math.min(1, sinceTick / tickMs);
+  }
+
+  function segmentPos(i, t) {
+    const to = snake[i];
+    let from = previous[i] ?? to;
+    let u = t;
+    if (i === 0 && headFrom) {
+      from = headFrom;
+      u = headFrom.t >= 1 ? 1 : Math.max(0, (t - headFrom.t) / (1 - headFrom.t));
+    }
+    return { c: from.c + (to.c - from.c) * u, r: from.r + (to.r - from.r) * u };
+  }
+
+  // How closed up the front of the snake is: 1 pressed against the obstacle,
+  // 0 at rest, below 0 for a moment as it springs back on the way out.
+  function pressLevel(now) {
+    if (!pressVecs || calmQuery.matches) return 0;
+    if (state === 'over') {
+      const p = Math.min(1, (now - overAt) / BOUNCE_MS);
+      return (1 - p) ** 2 * Math.cos(p * Math.PI * 2.5);
+    }
+    if (stalled) return easeOut(Math.min(1, stallMs / SETTLE_MS));
+    if (release) {
+      const p = Math.min(1, (clock - release.at) / RELEASE_MS);
+      if (p >= 1) release = null;
+      return release ? release.level * (1 - easeOut(p)) : 0;
+    }
+    return 0;
+  }
+
   function draw() {
+    const now = performance.now();
     const width = canvas.width;
     const height = canvas.height;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -307,17 +483,36 @@
       ctx.stroke();
     }
 
-    const t = state === 'running' ? Math.min(1, sinceTick / tickMs) : 1;
+    const t = moveT();
+    const level = pressLevel(now);
     ctx.fillStyle = pal['--cs'] ?? 'purple';
+    if (state === 'over') {
+      const p = Math.min(1, (now - overAt) / FADE_MS);
+      ctx.globalAlpha = 1 - (1 - DEAD_ALPHA) * easeOut(p);
+    }
     for (let i = snake.length - 1; i >= 0; i -= 1) {
-      const from = previous[i] ?? snake[i];
-      const to = snake[i];
-      const c = from.c + (to.c - from.c) * t;
-      const r = from.r + (to.r - from.r) * t;
+      const pos = segmentPos(i, t);
       const [inset, size, radius] = segmentShape(i);
-      roundRect((c - MIN_COL) * PITCH + inset, (r - MIN_ROW) * PITCH + inset, size, size, radius);
+      let w = size;
+      let h = size;
+      const push = level && pressVecs?.[i];
+      if (push) {
+        pos.c += push.c * level;
+        pos.r += push.r * level;
+        if (i === 0) {
+          // The head flattens along the way it pushes and widens across it.
+          const along = 1 - SQUASH * level;
+          const across = 1 + SQUASH * 0.5 * level;
+          if (push.c) [w, h] = [size * along, size * across];
+          else [w, h] = [size * across, size * along];
+        }
+      }
+      const x = (pos.c - MIN_COL) * PITCH + inset + (size - w) / 2;
+      const y = (pos.r - MIN_ROW) * PITCH + inset + (size - h) / 2;
+      roundRect(x, y, w, h, radius);
       ctx.fill();
     }
+    ctx.globalAlpha = 1;
   }
 
   function frame(now) {
@@ -325,11 +520,22 @@
     lastFrame = now;
     if (state === 'running') {
       clock += delta;
-      sinceTick += delta;
-      while (state === 'running' && sinceTick >= tickMs) {
-        sinceTick -= tickMs;
-        step();
+      if (stalled) {
+        stallMs += delta;
+        waitMs += delta;
+        if (queue.length) escape();
+        if (stalled && waitMs >= GRACE_MS) gameOver();
+      } else {
+        sinceTick += delta;
+        while (state === 'running' && !stalled && sinceTick >= tickMs) {
+          sinceTick -= tickMs;
+          step();
+        }
       }
+    }
+    if (state === 'over' && !statusShown && now - overAt >= STATUS_DELAY_MS) {
+      statusShown = true;
+      showStatus();
     }
     draw();
     requestAnimationFrame(frame);
@@ -374,7 +580,7 @@
       over: touch ? `Game over: ${score} points. Tap to play again` : `Game over: ${score} points. Press Space to play again`,
       error: 'The graph could not be loaded. Try again later.',
     };
-    statusEl.textContent = messages[state];
+    statusEl.textContent = state === 'over' && !statusShown ? '' : messages[state];
   }
 
   function readBest() {
@@ -411,13 +617,17 @@
 
   window.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
+    // Enter on the link back to the profile should still follow it.
+    if (event.key === 'Enter' && event.target.closest?.('a')) return;
     const d = KEYS[event.key.length === 1 ? event.key.toLowerCase() : event.key];
     if (d) {
       event.preventDefault();
-      steer(fromScreen(d));
+      // A held key repeats; only the first press is a turn.
+      if (!event.repeat) steer(fromScreen(d));
     } else if (event.key === ' ' || event.key === 'Enter') {
       event.preventDefault();
-      primary();
+      // Holding Space would otherwise pause and resume over and over.
+      if (!event.repeat) primary();
     } else if (event.key === 'Escape' || event.key === 'p') {
       pause();
     }
@@ -434,6 +644,11 @@
     },
     { passive: true },
   );
+
+  function swipeDir(dx, dy) {
+    return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? RIGHT : LEFT) : dy > 0 ? DOWN : UP;
+  }
+
   boardEl.parentElement.addEventListener(
     'touchmove',
     (event) => {
@@ -443,21 +658,29 @@
       const dx = t.clientX - touchStart.x;
       const dy = t.clientY - touchStart.y;
       if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_PX) return;
-      const d = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? RIGHT : LEFT) : dy > 0 ? DOWN : UP;
-      steer(fromScreen(d));
+      steer(fromScreen(swipeDir(dx, dy)));
       touchStart = { x: t.clientX, y: t.clientY };
       swiped = true;
     },
     { passive: false },
   );
   boardEl.parentElement.addEventListener('touchend', (event) => {
-    if (touchStart && !swiped && !event.target.closest('a')) primary();
+    if (touchStart && !swiped && !event.target.closest('a')) {
+      // A quick, short flick still steers; only a still finger is a tap.
+      const t = event.changedTouches[0];
+      const dx = t.clientX - touchStart.x;
+      const dy = t.clientY - touchStart.y;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) >= FLICK_PX) steer(fromScreen(swipeDir(dx, dy)));
+      else primary();
+    }
     touchStart = null;
   });
 
+  // Leaving the tab or the window pauses, so the snake never runs on unseen.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) pause();
   });
+  window.addEventListener('blur', pause);
   darkQuery.addEventListener('change', draw);
   touchQuery.addEventListener('change', showStatus);
   // The canvas sets the board's height, so only a change of width re-lays it out.
