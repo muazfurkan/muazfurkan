@@ -15,7 +15,8 @@ import { PLAY, clamp, drawCover } from './cells.js';
   const DOT_RADIUS = 2;
   const COLS = 53;
   const ROWS = 7;
-  // The board is the graph itself: the snake stays on the cells.
+  // The board is the graph itself: the snake stays on its 53 weeks. The last week is not over
+  // yet, so its days still to come have no cell; they stay blank and the snake can cross them.
   const MIN_COL = 0;
   const MAX_COL = COLS - 1;
   const MIN_ROW = 0;
@@ -240,8 +241,11 @@ import { PLAY, clamp, drawCover } from './cells.js';
         loadSvg('../dist/github-snake.svg'),
         loadSvg('../dist/github-snake-dark.svg'),
       ]);
-      if (light.cells.length !== COLS * ROWS) {
-        throw new Error(`expected ${COLS * ROWS} cells, found ${light.cells.length}`);
+      // A full year is 365 to 371 cells, depending on the weekday; anything else is not the graph.
+      const inside = light.cells.every((cell) => cell.col >= 0 && cell.col < COLS && cell.row >= 0 && cell.row < ROWS);
+      const spots = new Set(light.cells.map((cell) => key(cell.col, cell.row)));
+      if (!inside || spots.size !== light.cells.length || light.cells.length < COLS * ROWS - (ROWS - 1) || light.cells.length > COLS * ROWS) {
+        throw new Error(`expected ${COLS * ROWS - (ROWS - 1)} to ${COLS * ROWS} cells on a ${COLS}×${ROWS} grid, found ${light.cells.length}`);
       }
       palettes = { light: light.vars, dark: dark.vars };
       applyPalette();
