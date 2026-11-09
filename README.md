@@ -63,24 +63,24 @@ and some of it contains instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #32
+### ⚽ Daily LJASP puzzle &middot; #33
 
 From [LJASP](https://play.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**Yellow XI 0 &ndash; 3 Gold XI** &middot; 46'
+**White XI 1 &ndash; 3 Red XI** &middot; 46'
 
-> Half-time arrives with your team searching for sharper connections in the final third and more punch around the box.
+> Halftime arrives after a bruising first period: possession is contested, penalty-box presence is limited, and the central lanes feel tight.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Keep the same eleven but raise the press after the restart" and the engine boosts physicality (+13), momentum (+10) and stamina (+8) at no added risk. Your team keep faith with the XI and step the line higher.
+Call "Pair the front men and attack the box" and the engine boosts physicality (+12), wing pressure (+12) and momentum (+10), but adds risk (+10). A second forward joins the line; crosses and knockdowns become the plan.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-11-08.</sub>
+<sub>Seeded by date. Last run: 2026-11-09.</sub>
 
 ---
 
