@@ -63,24 +63,24 @@ and some of it contains instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #33
+### ⚽ Daily LJASP puzzle &middot; #34
 
 From [LJASP](https://play.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**White XI 1 &ndash; 3 Red XI** &middot; 46'
+**Red &amp; White XI 0 &ndash; 3 Red &amp; Black XI** &middot; 66'
 
-> Halftime arrives after a bruising first period: possession is contested, penalty-box presence is limited, and the central lanes feel tight.
+> The hour mark passes and legs begin to tire.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Pair the front men and attack the box" and the engine boosts physicality (+12), wing pressure (+12) and momentum (+10), but adds risk (+10). A second forward joins the line; crosses and knockdowns become the plan.
+Call "Inject new pace out wide to run at tired legs" and the engine boosts pace (+12), wing pressure (+12) and sharpness (+10) at no added risk. Fresh legs hit the flanks, hugging the line and driving at the full-backs to force retreats.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-11-09.</sub>
+<sub>Seeded by date. Last run: 2026-11-10.</sub>
 
 ---
 
