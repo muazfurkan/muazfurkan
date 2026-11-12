@@ -63,24 +63,24 @@ and some of it contains instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #35
+### ⚽ Daily LJASP puzzle &middot; #36
 
 From [LJASP](https://play.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**Sky Blue XI 0 &ndash; 3 Blue XI** &middot; 46'
+**Black XI 1 &ndash; 3 Yellow XI** &middot; 68'
 
-> Halftime arrives with the game tight in midfield and space flickering on the outside lanes.
+> Into the final stretch with chances at a premium and the next change likely to tilt momentum.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Target the flanks with overlaps and early service" and the engine boosts wing pressure (+12) and momentum (+10), but adds risk (+8). Your side pushes the full-backs on, wingers isolated for one-on-ones out wide.
+Call "Introduce a fresh striker for penalty-box threat" and the engine boosts momentum (+12), sharpness (+11) and morale (+10) at no added risk. A new centre-forward takes the stage, hugging the last line and attacking the six-yard channel.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-11-11.</sub>
+<sub>Seeded by date. Last run: 2026-11-12.</sub>
 
 ---
 
