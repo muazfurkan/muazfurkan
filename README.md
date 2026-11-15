@@ -63,24 +63,24 @@ and some of it contains instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #38
+### ⚽ Daily LJASP puzzle &middot; #39
 
 From [LJASP](https://play.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**Claret XI 1 &ndash; 1 White XI** &middot; 46'
+**White XI 2 &ndash; 4 Red XI** &middot; 46'
 
-> Halftime arrives with the sides still trading territory and half-chances.
+> Interval reset: the game is stretched, spaces are appearing between lines, and the next tweak could tilt control.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Target the flanks and switch play quickly" and the engine boosts wing pressure (+13), momentum (+9) and sharpness (+8), but adds risk (+10). Your team spread the play wide, switching flanks early to isolate the opponent’s full-backs.
+Call "Route creativity through the central lane" and the engine boosts creativity (+13), sharpness (+10) and momentum (+9) at no added risk. Extra bodies between the lines for White XI; the playmaker station becomes the hub for short, vertical passes.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-11-14.</sub>
+<sub>Seeded by date. Last run: 2026-11-15.</sub>
 
 ---
 
