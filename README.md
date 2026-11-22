@@ -63,24 +63,24 @@ and some of it contains instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #45
+### ⚽ Daily LJASP puzzle &middot; #46
 
 From [LJASP](https://play.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**Red XI 2 &ndash; 3 Yellow XI** &middot; 66'
+**Black XI 0 &ndash; 2 Claret XI** &middot; 46'
 
-> The hour mark has passed and the game hangs in the balance.
+> Half-time, and the visitors have spent forty-five minutes absorbing a wall of noise and relentless pressing.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Keep the shape balanced with a measured change" and the engine boosts sharpness (+12) and morale (+8) at no added risk. A measured switch from the visitors.
+Call "Stay compact and wait for the hosts to tire" and the engine boosts sharpness (+10) and morale (+8) at no added risk. The visitors sit deeper after the break, compact and disciplined, inviting the hosts forward and waiting for gaps to open.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-11-21.</sub>
+<sub>Seeded by date. Last run: 2026-11-22.</sub>
 
 ---
 
