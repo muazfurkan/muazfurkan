@@ -63,24 +63,24 @@ and some of it contains instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #47
+### ⚽ Daily LJASP puzzle &middot; #48
 
 From [LJASP](https://play.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**Black XI 0 &ndash; 2 Claret XI** &middot; 67'
+**Gold XI 1 &ndash; 4 Red XI** &middot; 58'
 
-> Sixty-seven minutes gone.
+> The visitors are tightening their grip and the hosts are running on empty.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Hold your nerve: no changes yet" and the engine boosts morale (+8) and sharpness (+8) at no added risk. No movement from the visitors' bench; the same eleven are trusted to see out the next phase.
+Call "All in: throw every attacker forward and gamble everything" and the engine boosts wing pressure (+12), but adds risk (+14). The hosts abandon caution.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-11-23.</sub>
+<sub>Seeded by date. Last run: 2026-11-24.</sub>
 
 ---
 
