@@ -63,24 +63,24 @@ and some of it contains instructive failures I'd rather document than hide.
 
 ---
 
-### ⚽ Daily LJASP puzzle &middot; #50
+### ⚽ Daily LJASP puzzle &middot; #51
 
 From [LJASP](https://play.ljasp.com), a deterministic football management simulation I build. A new decision every day.
 
-**Yellow XI 1 &ndash; 1 Claret XI** &middot; 70'
+**Black XI 1 &ndash; 2 Claret XI** &middot; 68'
 
-> The clock is ticking past the hour and the game hangs on a knife-edge.
+> Around the seventy-minute mark the game is slipping away from the home side.
 
 **What's your call?**
 
 <details>
 <summary>Reveal</summary>
 
-Call "Shore up the defence and protect the scoreline" and the engine boosts morale (+8) and cuts risk (-12), but costs momentum (-8). The home side reinforce the back line and drop deeper, determined to give nothing away.
+Call "Add another attacker and go all in" and the engine boosts momentum (+12) and sharpness (+8), but adds risk (+15). Another attacker joins the fray.
 
 </details>
 
-<sub>Seeded by date. Last run: 2026-11-26.</sub>
+<sub>Seeded by date. Last run: 2026-11-27.</sub>
 
 ---
 
